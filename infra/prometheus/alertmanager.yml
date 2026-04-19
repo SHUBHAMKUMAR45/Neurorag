@@ -1,0 +1,42 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: "smtp.gmail.com:587"
+  smtp_from: "neurorag-alerts@neurorag.io"
+  smtp_auth_username: "${ALERT_SMTP_USER}"
+  smtp_auth_password: "${ALERT_SMTP_PASSWORD}"
+  smtp_require_tls: true
+
+route:
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "ops-email"
+  routes:
+    - match:
+        severity: critical
+      receiver: "ops-email"
+      continue: true
+    - match:
+        severity: warning
+      receiver: "ops-email"
+
+receivers:
+  - name: "ops-email"
+    email_configs:
+      - to: "${ALERT_EMAIL}"
+        send_resolved: true
+        html: |
+          <h2>{{ .GroupLabels.alertname }}</h2>
+          <p><b>Severity:</b> {{ .GroupLabels.severity }}</p>
+          {{ range .Alerts }}
+          <p><b>Summary:</b> {{ .Annotations.summary }}</p>
+          <p><b>Description:</b> {{ .Annotations.description }}</p>
+          {{ end }}
+
+inhibit_rules:
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ["alertname"]

@@ -1,0 +1,179 @@
+version: "3.9"
+
+# ─── NeuroRAG Full Stack ───────────────────────────────────────────────────────
+# Services: neurorag-api, postgres, redis, prometheus, grafana,
+#           pushgateway, alertmanager, airflow
+
+x-common-env: &common-env
+  POSTGRES_URL: postgresql://neurorag:neurorag_secret@postgres:5432/neurorag
+  REDIS_URL: redis://redis:6379
+  AIRFLOW_API_URL: http://airflow:8080
+  PROMETHEUS_URL: http://prometheus:9090
+  PUSHGATEWAY_URL: http://pushgateway:9091
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  LLAMA_MODEL_PATH: /models/llama.gguf
+  ALERT_EMAIL: ${ALERT_EMAIL:-ops@neurorag.io}
+  NEURORAG_API_KEY: ${NEURORAG_API_KEY:-}
+
+services:
+
+  # ── NeuroRAG API ─────────────────────────────────────────────────────────
+  neurorag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: neurorag:3.0.0
+    container_name: neurorag-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "9090:9090"
+    environment:
+      <<: *common-env
+    volumes:
+      - neurorag-data:/data
+      - ./models:/models:ro
+      - ./logs:/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: neurorag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: neurorag
+      POSTGRES_USER: neurorag
+      POSTGRES_PASSWORD: neurorag_secret
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neurorag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: neurorag-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── Prometheus ────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: neurorag-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+
+  # ── Prometheus Pushgateway ────────────────────────────────────────────────
+  pushgateway:
+    image: prom/pushgateway:v1.7.0
+    container_name: neurorag-pushgateway
+    restart: unless-stopped
+    ports:
+      - "9092:9091"
+
+  # ── Alertmanager ──────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: neurorag-alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+
+  # ── Grafana ───────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: neurorag-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  # ── Airflow ───────────────────────────────────────────────────────────────
+  airflow:
+    image: apache/airflow:2.8.0
+    container_name: neurorag-airflow
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *common-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://neurorag:neurorag_secret@postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-changeme_generate_with_fernet}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-changeme}
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW_CONN_NEURORAG_API: "http://neurorag-api:8000"
+    volumes:
+      - ./mlops/dags:/opt/airflow/dags:ro
+      - airflow-logs:/opt/airflow/logs
+      - neurorag-data:/data
+      - ./models:/models:ro
+    command: standalone
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  neurorag-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+  airflow-logs:
+
+networks:
+  default:
+    name: neurorag-network

@@ -1,0 +1,614 @@
+{
+  "title": "NeuroRAG \u2014 Production Dashboard",
+  "uid": "neurorag-prod-v3",
+  "version": 2,
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "interval",
+        "type": "interval",
+        "options": [
+          {
+            "selected": true,
+            "text": "1m",
+            "value": "1m"
+          },
+          {
+            "text": "5m",
+            "value": "5m"
+          },
+          {
+            "text": "15m",
+            "value": "15m"
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Query Throughput (req/min)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "rate(neurorag_queries_total[1m]) * 60",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "P50 / P95 / P99 Query Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(neurorag_query_latency_ms_bucket[1m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(neurorag_query_latency_ms_bucket[1m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(neurorag_query_latency_ms_bucket[1m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Hallucination Rate Trend",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.03
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "alert threshold (5%)"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "rate(neurorag_hallucinations_total[5m]) / clamp_min(rate(neurorag_queries_total[5m]), 0.001)",
+          "legendFormat": "hallucination rate",
+          "refId": "A"
+        },
+        {
+          "expr": "0.05",
+          "legendFormat": "alert threshold (5%)",
+          "refId": "B"
+        }
+      ],
+      "description": "Rolling hallucination rate over time. Alert fires at >5% sustained for 5m.",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Confidence Distribution",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 6,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "production threshold"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(neurorag_confidence_score_bucket[$__rate_interval]))",
+          "legendFormat": "p50 confidence",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.75, rate(neurorag_confidence_score_bucket[$__rate_interval]))",
+          "legendFormat": "p75 confidence",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(neurorag_confidence_score_bucket[$__rate_interval]))",
+          "legendFormat": "p95 confidence",
+          "refId": "C"
+        },
+        {
+          "expr": "0.85",
+          "legendFormat": "production threshold",
+          "refId": "D"
+        }
+      ],
+      "description": "p50/p75/p95 confidence scores over time. Low p50 signals systematic retrieval failure.",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Retry Loop Distribution",
+      "type": "barchart",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum by (le) (increase(neurorag_query_loops_bucket[$__rate_interval]))",
+          "legendFormat": "{{le}} loop(s)",
+          "refId": "A"
+        }
+      ],
+      "description": "Distribution of self-healing iterations per query. Queries requiring >1 loop indicate retrieval or generation issues the critic detected.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1
+          }
+        }
+      },
+      "options": {
+        "barWidth": 0.7,
+        "groupWidth": 0.7,
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "GPU Utilization %",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 6,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "neurorag_gpu_utilization_percent",
+          "legendFormat": "GPU %"
+        },
+        {
+          "expr": "neurorag_gpu_memory_used_mb / 1024",
+          "legendFormat": "GPU Memory (GB)"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "FAISS Index Size (vectors)",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "neurorag_faiss_index_size"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Ingestion Rate (chunks/min)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 4,
+        "y": 12,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "rate(neurorag_ingest_chunks_total[1m]) * 60"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Retrieval Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(neurorag_retrieval_latency_ms_bucket[1m]))",
+          "legendFormat": "p95 retrieval"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(neurorag_rerank_latency_ms_bucket[1m]))",
+          "legendFormat": "p95 rerank"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Agent Latency Heatmap (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(neurorag_agent_latency_ms_bucket[1m])) by (agent)",
+          "legendFormat": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "MLOps Retraining Events",
+      "type": "timeseries",
+      "description": "Faithfulness-triggered retraining events: pre/post faithfulness and delta. Each spike = one closed-loop retrain cycle.",
+      "gridPos": {
+        "x": 8,
+        "y": 12,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "neurorag_retrain_pre_faithfulness",
+          "legendFormat": "pre-retrain faithfulness",
+          "refId": "A"
+        },
+        {
+          "expr": "neurorag_retrain_post_faithfulness",
+          "legendFormat": "post-retrain faithfulness",
+          "refId": "B"
+        },
+        {
+          "expr": "neurorag_retrain_faithfulness_delta",
+          "legendFormat": "\u0394 faithfulness",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "\u0394 faithfulness"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 20
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#10b981",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Benchmark Evaluation Metrics",
+      "type": "stat",
+      "description": "Latest offline benchmark results pushed from neurorag_eval Airflow DAG via Prometheus Pushgateway.",
+      "gridPos": {
+        "x": 16,
+        "y": 12,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "neurorag_bench_token_f1",
+          "legendFormat": "Token F1",
+          "refId": "A"
+        },
+        {
+          "expr": "neurorag_bench_avg_confidence",
+          "legendFormat": "Avg Confidence",
+          "refId": "B"
+        },
+        {
+          "expr": "neurorag_bench_context_relevance",
+          "legendFormat": "Ctx Relevance",
+          "refId": "C"
+        },
+        {
+          "expr": "neurorag_bench_retry_success_rate",
+          "legendFormat": "Retry Success",
+          "refId": "D"
+        },
+        {
+          "expr": "neurorag_bench_convergence_efficiency",
+          "legendFormat": "Conv. Efficiency",
+          "refId": "E"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.8
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Self-Healing Effectiveness (Benchmark)",
+      "type": "timeseries",
+      "description": "Confidence improvement from self-healing loop, measured by offline benchmark. Rising delta proves healing convergence.",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "neurorag_bench_convergence_rate",
+          "legendFormat": "convergence rate",
+          "refId": "A"
+        },
+        {
+          "expr": "neurorag_bench_retry_success_rate",
+          "legendFormat": "retry success rate",
+          "refId": "B"
+        },
+        {
+          "expr": "neurorag_bench_confidence_improvement",
+          "legendFormat": "confidence improvement",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Latency Percentiles (p50 / p95) by Agent",
+      "type": "timeseries",
+      "description": "p50 and p95 latency per agent. Isolates bottlenecks: high critic latency = LLM slowdown; high retrieval = FAISS/index issue.",
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, agent) (rate(neurorag_agent_latency_ms_bucket[$__rate_interval])))",
+          "legendFormat": "p50 {{agent}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, agent) (rate(neurorag_agent_latency_ms_bucket[$__rate_interval])))",
+          "legendFormat": "p95 {{agent}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ],
+  "tags": [
+    "neurorag",
+    "production",
+    "rag",
+    "mlops"
+  ],
+  "description": "NeuroRAG full production dashboard: throughput, latency, hallucination trend, confidence distribution, retry loop distribution, MLOps retraining events, benchmark metrics."
+}

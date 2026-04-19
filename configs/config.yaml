@@ -1,0 +1,86 @@
+system:
+  name: "NeuroRAG"
+  version: "3.0.0"
+  environment: "production"
+  log_level: "INFO"
+
+llm:
+  provider: "local"                        # "local" | "openai"
+  model: "meta-llama/Llama-3-8b-instruct"
+  temperature: 0.1
+  max_tokens: 1024
+  top_p: 0.9
+  repeat_penalty: 1.1
+  device: "cuda"                           # "cuda" | "cpu"
+
+critic_llm:
+  provider: "openai"                       # GPT-4 for critic to reduce bias
+  model: "gpt-4-turbo"
+  temperature: 0.0
+  max_tokens: 512
+
+embedding:
+  model: "sentence-transformers/all-MiniLM-L6-v2"
+  batch_size: 64
+  device: "cuda"
+  normalize: true
+  dimension: 384
+
+retrieval:
+  top_k: 12
+  hybrid: true
+  bm25_weight: 0.35
+  vector_weight: 0.65
+  chunk_size: 512
+  chunk_overlap: 64
+  max_context_tokens: 3000
+
+reranker:
+  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  top_k: 5
+  device: "cuda"
+
+self_heal:
+  max_loops: 3
+  confidence_threshold: 0.90
+  failure_cooldown_ms: 100
+
+vector_store:
+  backend: "faiss"                         # "faiss" | "pinecone"
+  index_path: "/data/faiss/index.bin"
+  ids_path: "/data/faiss/ids.json"
+  metric: "inner_product"
+
+bm25:
+  index_path: "/data/whoosh_index"
+
+database:
+  postgres_url: "${POSTGRES_URL}"
+  pool_size: 10
+  max_overflow: 20
+
+cache:
+  redis_url: "${REDIS_URL}"
+  ttl_seconds: 3600
+  max_size_mb: 512
+
+monitoring:
+  prometheus_port: 9090
+  metrics_path: "/metrics"
+  enable_tracing: true
+  jaeger_host: "jaeger"
+  jaeger_port: 6831
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  timeout: 60
+  cors_origins: ["*"]
+  rate_limit_per_minute: 60
+
+security:
+  pii_filtering: true
+  max_query_length: 2000
+  api_key_required: true
+  api_key_env_var: "NEURORAG_API_KEY"

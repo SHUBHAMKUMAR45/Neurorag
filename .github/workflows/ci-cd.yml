@@ -1,0 +1,264 @@
+name: NeuroRAG CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: 'Deploy environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, production]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/neurorag
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ─── Lint + Type Check ─────────────────────────────────────────────────────
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install lint deps
+        run: pip install ruff mypy types-PyYAML types-redis
+
+      - name: Ruff lint
+        run: ruff check . --select E,F,W,I,N,UP --ignore E501
+
+      - name: Type check
+        run: mypy agents/ rag/ api/ evaluation/ --ignore-missing-imports --no-strict-optional
+
+  # ─── Unit + Integration Tests ──────────────────────────────────────────────
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: neurorag_test
+          POSTGRES_USER: neurorag
+          POSTGRES_PASSWORD: test_secret
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U neurorag" --health-interval 10s --health-retries 5
+
+    env:
+      POSTGRES_URL: postgresql://neurorag:test_secret@localhost:5432/neurorag_test
+      REDIS_URL: redis://localhost:6379
+      OPENAI_API_KEY: "sk-test-disabled"
+      NEURORAG_API_KEY: "test-key-12345"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies (CPU-only for CI)
+        run: |
+          pip install --upgrade pip
+          # Install CPU-only torch to avoid 2GB CUDA download in CI
+          pip install torch==2.2.2 --index-url https://download.pytorch.org/whl/cpu
+          pip install faiss-cpu sentence-transformers whoosh asyncpg
+          pip install fastapi uvicorn pydantic pydantic-settings pyyaml
+          pip install redis structlog prometheus-client httpx
+          pip install pytest pytest-asyncio pytest-cov pytest-mock
+
+      - name: Run unit tests
+        run: |
+          pytest tests/test_neurorag.py -v --tb=short \
+            --cov=agents --cov=rag --cov=evaluation \
+            --cov-report=xml --cov-report=term-missing \
+            -x
+
+      - name: Run load tests (smoke)
+        run: |
+          pytest tests/test_load.py -v --tb=short -k "smoke" || true
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          flags: unit-tests
+          fail_ci_if_error: false
+
+  # ─── Build Docker Image ────────────────────────────────────────────────────
+  build:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  # ─── Security Scan ─────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # ─── Deploy to Staging ─────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+      url: https://api-staging.neurorag.io
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.29.0
+
+      - name: Configure kubeconfig (staging)
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > ~/.kube/config
+
+      - name: Deploy to staging namespace
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}"
+          kubectl set image deployment/neurorag-api api="$IMAGE" -n neurorag-staging
+          kubectl rollout status deployment/neurorag-api -n neurorag-staging --timeout=300s
+
+      - name: Run smoke tests against staging
+        run: |
+          STAGING_URL="https://api-staging.neurorag.io"
+          curl -f "$STAGING_URL/health" -H "X-API-Key: ${{ secrets.STAGING_API_KEY }}"
+          echo "Staging health check passed."
+
+  # ─── Deploy to Production (manual approval) ────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://api.neurorag.io
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.29.0
+
+      - name: Configure kubeconfig (production)
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+
+      - name: Canary deploy (10% traffic)
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}"
+          kubectl set image deployment/neurorag-canary api="$IMAGE" -n neurorag
+          kubectl rollout status deployment/neurorag-canary -n neurorag --timeout=120s
+
+      - name: Wait for canary metrics (5 min)
+        run: sleep 300
+
+      - name: Validate canary error rate
+        run: |
+          PROM_URL="${{ secrets.PROMETHEUS_URL }}"
+          RATE=$(curl -s "$PROM_URL/api/v1/query?query=rate(neurorag_queries_total{status='error'}[5m])" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['data']['result'][0]['value'][1] if d['data']['result'] else '0')")
+          echo "Canary error rate: $RATE"
+          python3 -c "import sys; rate=float('$RATE'); sys.exit(1) if rate > 0.05 else sys.exit(0)"
+
+      - name: Promote canary to full production
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}"
+          kubectl set image deployment/neurorag-api api="$IMAGE" -n neurorag
+          kubectl rollout status deployment/neurorag-api -n neurorag --timeout=300s
+          echo "Production deployment complete: $IMAGE"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/neurorag-api -n neurorag
+          kubectl rollout undo deployment/neurorag-canary -n neurorag
+          echo "ROLLED BACK due to deployment failure."

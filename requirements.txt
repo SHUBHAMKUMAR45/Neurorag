@@ -1,0 +1,76 @@
+# ─── NeuroRAG Production Dependencies ────────────────────────────────────────
+# Pin major versions; update with: pip-compile requirements.in
+
+# ── Core Framework ────────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+uvloop==0.19.0
+pydantic==2.7.1
+pydantic-settings==2.3.0
+
+# ── LLM / AI ─────────────────────────────────────────────────────────────────
+openai==1.30.1
+llama-cpp-python==0.2.76             # Local LLaMA inference (CUDA build)
+sentence-transformers==3.0.1         # Embedding + CrossEncoder reranking
+transformers==4.41.1
+torch==2.2.2
+accelerate==0.30.0
+
+# ── Vector Store ──────────────────────────────────────────────────────────────
+faiss-gpu==1.7.2                     # FAISS with GPU support (RTX 4060)
+# faiss-cpu==1.8.0                   # Uncomment for CPU-only environments
+numpy==1.26.4
+
+# ── BM25 / Search ────────────────────────────────────────────────────────────
+whoosh==2.7.4
+
+# ── Database ─────────────────────────────────────────────────────────────────
+asyncpg==0.29.0
+sqlalchemy==2.0.30
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# ── Caching ───────────────────────────────────────────────────────────────────
+redis[asyncio]==5.0.4
+
+# ── Observability ─────────────────────────────────────────────────────────────
+prometheus-client==0.20.0
+structlog==24.1.0
+opentelemetry-api==1.24.0
+opentelemetry-sdk==1.24.0
+opentelemetry-exporter-jaeger==1.24.0
+opentelemetry-instrumentation-fastapi==0.45b0
+
+# ── Config ────────────────────────────────────────────────────────────────────
+pyyaml==6.0.1
+python-dotenv==1.0.1
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+httpx==0.27.0
+requests==2.32.3
+aiofiles==23.2.1
+tenacity==8.3.0                      # Retry logic
+cryptography==42.0.5                 # Fernet key generation for Airflow
+
+# ── MLOps ─────────────────────────────────────────────────────────────────────
+apache-airflow==2.9.1
+apache-airflow-providers-docker==3.9.2
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.2.0
+pytest-asyncio==0.23.7
+pytest-cov==5.0.0
+pytest-mock==3.14.0
+
+# ── Evaluation ────────────────────────────────────────────────────────────────
+ragas==0.1.10                        # RAGAS evaluation framework
+
+# ── Load Testing ──────────────────────────────────────────────────────────────
+locust==2.28.0
+
+# ── Security ──────────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0     # JWT support
+
+# ── Code Quality ──────────────────────────────────────────────────────────────
+ruff==0.4.4                          # Fast linter
+mypy==1.10.0                         # Type checker

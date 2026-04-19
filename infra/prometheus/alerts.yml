@@ -1,0 +1,146 @@
+groups:
+  - name: neurorag.critical
+    interval: 30s
+    rules:
+
+      # ── Hallucination Rate ────────────────────────────────────────────────
+      - alert: HighHallucinationRate
+        expr: |
+          rate(neurorag_hallucinations_total[5m])
+          / rate(neurorag_queries_total[5m]) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+          team: ml-platform
+        annotations:
+          summary: "NeuroRAG hallucination rate > 10%"
+          description: >
+            Hallucination rate is {{ printf "%.1f" $value | humanizePercentage }}
+            over the last 5 minutes. Critic may be degraded or context quality dropped.
+          runbook: "https://wiki.neurorag.io/runbooks/hallucination-spike"
+
+      # ── Confidence Score Drop ─────────────────────────────────────────────
+      - alert: LowConfidenceScore
+        expr: |
+          histogram_quantile(0.50, rate(neurorag_confidence_score_bucket[10m])) < 0.75
+        for: 5m
+        labels:
+          severity: warning
+          team: ml-platform
+        annotations:
+          summary: "NeuroRAG median confidence score below 0.75"
+          description: >
+            p50 confidence = {{ printf "%.3f" $value }}.
+            Self-healing loop may be failing to improve answers.
+
+      # ── API Latency ───────────────────────────────────────────────────────
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(0.95, rate(neurorag_query_latency_ms_bucket[5m])) > 3000
+        for: 3m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "NeuroRAG p95 query latency > 3s"
+          description: >
+            p95 latency = {{ printf "%.0f" $value }}ms.
+            LLM or retrieval backend may be slow. Check GPU utilisation.
+
+      # ── Error Rate ────────────────────────────────────────────────────────
+      - alert: HighErrorRate
+        expr: |
+          rate(neurorag_queries_total{status="error"}[5m])
+          / rate(neurorag_queries_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "NeuroRAG API error rate > 5%"
+          description: >
+            Error rate = {{ printf "%.1f" $value | humanizePercentage }}.
+            Check /circuit-breaker/status endpoint.
+
+      # ── Circuit Breaker Open ──────────────────────────────────────────────
+      - alert: CircuitBreakerOpen
+        expr: neurorag_circuit_breaker_state > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "NeuroRAG circuit breaker OPEN for {{ $labels.client }}"
+          description: >
+            Circuit breaker for client '{{ $labels.client }}' is in state
+            {{ $value }} (1=open, 2=half_open). LLM calls are being blocked.
+
+      # ── GPU Utilisation ───────────────────────────────────────────────────
+      - alert: GPUUtilisationLow
+        expr: neurorag_gpu_utilization_percent < 10
+        for: 10m
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: "GPU utilisation unexpectedly low (<10%)"
+          description: >
+            GPU at {{ printf "%.0f" $value }}%.
+            LLM may be running on CPU or GPU scheduling is misconfigured.
+
+      - alert: GPUMemoryHigh
+        expr: neurorag_gpu_memory_used_mb > 7000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "GPU memory usage > 7GB on RTX 4060"
+          description: >
+            GPU memory = {{ printf "%.0f" $value }}MB / 8192MB.
+            Risk of OOM. Consider reducing batch size or model quantisation.
+
+      # ── FAISS Index Empty ─────────────────────────────────────────────────
+      - alert: FAISSIndexEmpty
+        expr: neurorag_faiss_index_size == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: ml-platform
+        annotations:
+          summary: "FAISS index is empty — retrieval will always fail"
+          description: >
+            FAISS index has 0 vectors. Ingestion may have failed or
+            the index file was deleted. Run neurorag_ingest DAG immediately.
+
+      # ── Retry Rate High ───────────────────────────────────────────────────
+      - alert: HighRetryRate
+        expr: |
+          histogram_quantile(0.80, rate(neurorag_query_loops_bucket[10m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: ml-platform
+        annotations:
+          summary: "NeuroRAG p80 loop count > 2 — self-healing struggling"
+          description: >
+            p80 loops = {{ printf "%.1f" $value }}.
+            High retry rate may indicate context quality issues or
+            LLM degradation. Check critic confidence scores.
+
+  - name: neurorag.mlops
+    interval: 60s
+    rules:
+
+      # ── Ingestion Staleness ───────────────────────────────────────────────
+      - alert: IngestionStale
+        expr: |
+          (time() - max(neurorag_ingest_chunks_total offset 7d)) > 604800
+        for: 1h
+        labels:
+          severity: warning
+          team: ml-platform
+        annotations:
+          summary: "No document ingestion in the last 7 days"
+          description: >
+            The FAISS index may be stale. Trigger neurorag_ingest DAG.

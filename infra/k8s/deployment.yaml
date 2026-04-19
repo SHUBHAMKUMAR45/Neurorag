@@ -1,0 +1,348 @@
+# ─── NeuroRAG Kubernetes Manifests ────────────────────────────────────────────
+# Apply with: kubectl apply -f infra/k8s/ -n neurorag
+# Requirements: NVIDIA device plugin, cert-manager (optional), ingress-nginx
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: neurorag
+  labels:
+    app.kubernetes.io/name: neurorag
+    app.kubernetes.io/version: "3.0.0"
+
+---
+# ─── ConfigMap ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: neurorag-config
+  namespace: neurorag
+data:
+  LOG_LEVEL: "INFO"
+  LLAMA_MODEL_PATH: "/models/llama.gguf"
+  INGEST_SOURCE_PATH: "/data/raw"
+  DRIFT_THRESHOLD: "0.12"
+
+---
+# ─── Secret (values must be base64-encoded) ──────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: neurorag-secrets
+  namespace: neurorag
+type: Opaque
+stringData:
+  POSTGRES_URL: "postgresql://neurorag:CHANGE_ME@postgres:5432/neurorag"
+  REDIS_URL: "redis://redis:6379"
+  OPENAI_API_KEY: "CHANGE_ME"
+  GRAFANA_PASSWORD: "CHANGE_ME"
+
+---
+# ─── FAISS Data PVC ──────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neurorag-data-pvc
+  namespace: neurorag
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: fast-ssd   # Replace with your StorageClass
+
+---
+# ─── Model PVC (read-only from model registry) ───────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neurorag-models-pvc
+  namespace: neurorag
+spec:
+  accessModes: [ReadOnlyMany]
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard
+
+---
+# ─── Deployment ───────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neurorag-api
+  namespace: neurorag
+  labels:
+    app: neurorag
+    component: api
+    version: "3.0.0"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: neurorag
+      component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # Zero-downtime rolling update
+  template:
+    metadata:
+      labels:
+        app: neurorag
+        component: api
+        version: "3.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: neurorag-sa
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: api
+          image: registry.neurorag.io/neurorag:3.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          env:
+            - name: POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: neurorag-secrets
+                  key: POSTGRES_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: neurorag-secrets
+                  key: REDIS_URL
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: neurorag-secrets
+                  key: OPENAI_API_KEY
+            - name: LLAMA_MODEL_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: neurorag-config
+                  key: LLAMA_MODEL_PATH
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: logs
+              mountPath: /logs
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: neurorag-data-pvc
+        - name: models
+          persistentVolumeClaim:
+            claimName: neurorag-models-pvc
+        - name: logs
+          emptyDir: {}
+
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      nodeSelector:
+        accelerator: nvidia-gpu
+
+      imagePullSecrets:
+        - name: registry-credentials
+
+---
+# ─── Service ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: neurorag-api
+  namespace: neurorag
+  labels:
+    app: neurorag
+spec:
+  selector:
+    app: neurorag
+    component: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+  type: ClusterIP
+
+---
+# ─── Ingress ──────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: neurorag-ingress
+  namespace: neurorag
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [api.neurorag.io]
+      secretName: neurorag-tls
+  rules:
+    - host: api.neurorag.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: neurorag-api
+                port:
+                  number: 80
+
+---
+# ─── Horizontal Pod Autoscaler ────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: neurorag-hpa
+  namespace: neurorag
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: neurorag-api
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# ─── ServiceAccount ───────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: neurorag-sa
+  namespace: neurorag
+
+---
+# ─── Canary Deployment (10% traffic) ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neurorag-canary
+  namespace: neurorag
+  labels:
+    app: neurorag
+    component: api
+    track: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neurorag
+      component: api
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: neurorag
+        component: api
+        track: canary
+    spec:
+      serviceAccountName: neurorag-sa
+      containers:
+        - name: api
+          image: registry.neurorag.io/neurorag:canary
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+            - containerPort: 9090
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          envFrom:
+            - secretRef:
+                name: neurorag-secrets
+            - configMapRef:
+                name: neurorag-config
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: models
+              mountPath: /models
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: neurorag-data-pvc
+        - name: models
+          persistentVolumeClaim:
+            claimName: neurorag-models-pvc
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      nodeSelector:
+        accelerator: nvidia-gpu
+      imagePullSecrets:
+        - name: registry-credentials
