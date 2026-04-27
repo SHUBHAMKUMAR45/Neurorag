@@ -1,12 +1,17 @@
-# Byte-compiled / optimized / DLL files
+# Environments
+.env
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -26,65 +31,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# Environments
+# Virtual environments
 .env
 .venv
 env/
@@ -93,54 +40,49 @@ ENV/
 env.bak/
 venv.bak/
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# IDE, OS, and Editors
-.vscode/
+# IDE / Editor
 .idea/
-.DS_Store
-Thumbs.db
+.vscode/
 *.swp
-*.bak
-*~
+*.swo
 .qodo/
 
-# Docker overrides (if applicable)
-docker-compose.override.yml
+# Testing / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
 
-# MLOps, Data, and Logging (custom for neurorag pipeline)
-mlruns/
+# Data and Models
+data/
+models/
+*.db
+*.sqlite3
+*.faiss
+*.index
+
+# Logs
 logs/
 *.log
-*.csv
-*.xlsx
-*.parquet
-dataset/
-data/
 
-# Vector Databases and RAG caches
-chroma_db/
-faiss_index/
-lancedb/
-.qdrant/
-vectorstore/
-embeddings/
+# Docker
+docker-compose.override.yml
+.dockerignore
 
-# Node/JavaScript (if a frontend gets added)
-node_modules/
-.next/
-dist/
-build/
-
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

@@ -1,235 +1,179 @@
 # NeuroRAG — Autonomous Self-Healing Multi-Agent RAG System
 
-> Production-grade AI system combining hybrid retrieval, multi-agent reasoning,
-> hallucination detection, and automated MLOps pipelines.
+> **Version 3.0.0** | Python 3.11 | Windows + Linux | CPU + GPU
+
+> 🚀 **Deploying to GitHub / Production?** Check out the [GitHub Deployment Guide](DEPLOYMENT.md).
 
 ---
 
-## Architecture Overview
+## Quick Start (Windows, No Docker)
 
-```
-User Query
-    │
-    ▼
-Intent Analyzer ──────────── classifies: factual | reasoning | multi_hop | ambiguous
-    │
-    ▼
-Planner ─────────────────── decomposes into sub-queries + retrieval strategy
-    │
-    ├──────────────┐
-    ▼              ▼
-BM25 (Whoosh)   Vector (FAISS)     ← parallel async retrieval
-    │              │
-    └──────┬───────┘
-           ▼
-      RRF Fusion ──────────── Reciprocal Rank Fusion score merging
-           │
-           ▼
-    Cross-Encoder ──────────── reranking to top-k
-           │
-           ▼
-      Generator ──────────── grounded answer with [doc#chunk] citations
-           │
-           ▼
-        Critic ──────────── faithfulness · relevance · completeness · confidence
-           │
-     ┌─────┴──────────────────────────┐
-     │ conf >= 0.90?                  │ conf < 0.90
-     ▼                                ▼
- Return Answer              Reflection Agent ── root-cause analysis
-                                 │
-                                 ▼
-                            Fixer Agent ── modify query / top_k / prompt_hint
-                                 │
-                                 └───────── [retry loop, max 3 iterations]
+### 1 — Prerequisites
 
-All results → Evaluator → PostgreSQL → Prometheus → Grafana
-              MLOps (Airflow) → Drift Detection → Retrain → Canary Deploy
+Install these first:
+- [Python 3.11](https://python.org/downloads/) — check "Add to PATH"
+- [PostgreSQL 16](https://postgresql.org/download/windows/) — remember the superuser password
+- [Redis for Windows](https://github.com/tporadowski/redis/releases) — optional but recommended
+
+### 2 — Create virtual environment
+
+```powershell
+cd neurorag_final
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
----
+### 3 — Install dependencies
 
-## Folder Structure
+```powershell
+# Allow script execution if needed:
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
-```
-neurorag/
-├── agents/
-│   ├── schemas.py            # Typed Pydantic models for all inter-agent data
-│   ├── intent_analyzer.py    # Query classification (factual/reasoning/multi_hop)
-│   ├── planner.py            # Sub-query decomposition
-│   ├── generator.py          # Grounded answer generation
-│   ├── critic.py             # Hallucination detection + confidence scoring
-│   ├── reflection_fixer.py   # Root-cause + corrective strategy
-│   └── orchestrator.py       # Self-healing pipeline loop
-├── rag/
-│   ├── ingest.py             # Semantic chunking + FAISS + BM25 indexing
-│   ├── retriever.py          # Hybrid retrieval with RRF fusion
-│   ├── reranker.py           # Cross-encoder reranking
-│   └── llm_client.py         # Unified LLM interface (local LLaMA / OpenAI)
-├── evaluation/
-│   └── evaluator.py          # DB logging, offline eval, aggregate stats
-├── api/
-│   └── main.py               # FastAPI: /query /ingest /health /stats
-├── dashboard/
-│   └── metrics.py            # Prometheus counters, histograms, GPU collector
-├── mlops/
-│   └── dags/
-│       └── pipelines.py      # 5 Airflow DAGs (ingest/eval/drift/retrain/deploy)
-├── infra/
-│   ├── k8s/
-│   │   └── deployment.yaml   # Deployment, Service, HPA, Ingress, Canary
-│   ├── prometheus/
-│   │   └── prometheus.yml    # Scrape config
-│   └── grafana/
-│       └── dashboards/
-│           └── neurorag.json # Pre-built Grafana dashboard
-├── tests/
-│   └── test_neurorag.py      # Unit + integration tests
-├── configs/
-│   ├── config.yaml           # Full YAML config
-│   └── settings.py           # Pydantic config loader
-├── Dockerfile                # Multi-stage CUDA build
-├── docker-compose.yml        # Full local stack
-└── requirements.txt          # Pinned dependencies
+# Run the Windows setup script:
+.\install_windows.ps1
 ```
 
----
-
-## Quickstart — Local Development
-
-### Prerequisites
-- NVIDIA GPU (RTX 4060 or better), CUDA 12.1+
-- Docker + Docker Compose with NVIDIA Container Toolkit
-- Python 3.11+
-
-### 1. Clone and configure
-
-```bash
-git clone https://github.com/yourorg/neurorag.git
-cd neurorag
-cp .env.example .env
-# Edit .env: set OPENAI_API_KEY, POSTGRES_URL (or use defaults), etc.
+Or install manually:
+```powershell
+pip install "numpy==1.26.4" --force-reinstall
+pip install faiss-cpu packaging
+pip install fastapi==0.111.0 "uvicorn[standard]==0.29.0" pydantic==2.7.1
+pip install openai==1.30.1 "sentence-transformers==3.0.1" transformers==4.41.1
+pip install whoosh==2.7.4 asyncpg==0.29.0 alembic==1.13.1 psycopg2-binary==2.9.9
+pip install "redis[asyncio]==5.0.4" prometheus-client==0.20.0 structlog==24.1.0
+pip install pyyaml==6.0.1 python-dotenv==1.0.1 httpx==0.27.0 aiofiles==23.2.1
+pip install "opentelemetry-api==1.24.0" "opentelemetry-sdk==1.24.0"
 ```
 
-### 2. Place your LLaMA model
+### 4 — Configure environment
 
-```bash
-mkdir -p models/
-# Download Llama-3-8B-Instruct GGUF to:
-# models/llama.gguf
+```powershell
+copy .env.example .env
+notepad .env
 ```
 
-### 3. Start the full stack
-
-```bash
-docker compose up -d
-# Services: neurorag-api (8000), postgres (5432), redis (6379),
-#           prometheus (9091), grafana (3000), airflow (8080)
+Set these values in `.env`:
+```
+OPENAI_API_KEY=sk-...         # Your OpenAI API key
+NEURORAG_API_KEY=             # Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+POSTGRES_URL=postgresql://neurorag_user:StrongPass123@localhost:5432/neurorag
+REDIS_URL=redis://localhost:6379
 ```
 
-### 4. Verify
-
-```bash
-curl http://localhost:8000/health
-# → {"status":"ok","version":"3.0.0","faiss_vectors":0}
+Load them into PowerShell:
+```powershell
+. .\load_env.ps1
 ```
 
-### 5. Ingest documents
+### 5 — Create PostgreSQL database
 
-```bash
-curl -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -d '{
-    "documents": [
-      {"id": "doc1", "text": "Paris is the capital of France.", "metadata": {}},
-      {"id": "doc2", "text": "The Eiffel Tower is in Paris, France.", "metadata": {}}
-    ]
-  }'
+Open psql or pgAdmin and run:
+```sql
+CREATE USER neurorag_user WITH PASSWORD 'StrongPass123';
+CREATE DATABASE neurorag OWNER neurorag_user;
+GRANT ALL PRIVILEGES ON DATABASE neurorag TO neurorag_user;
 ```
 
-### 6. Query
+Then run migrations:
+```powershell
+alembic upgrade head
+```
 
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is the capital of France?"}'
+### 6 — Create data directories
 
-# Response:
-# {
-#   "request_id": "...",
-#   "answer": "Paris is the capital of France. [doc1#0]",
-#   "citations": ["doc1#0"],
-#   "confidence": 0.96,
-#   "loops": 1,
-#   "latency_ms": 342,
-#   "insufficient_context": false
-# }
+```powershell
+New-Item -ItemType Directory -Force -Path data\faiss, data\whoosh_index, data\raw, logs, static
+```
+
+### 7 — Start the API
+
+```powershell
+# IMPORTANT: use --workers 1 on Windows (no uvloop)
+uvicorn api.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+### 8 — Open the UI
+
+Navigate to **http://localhost:8000** in your browser.
+
+### 9 — Seed the knowledge base (new PowerShell tab)
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+. .\load_env.ps1
+python scripts\seed_data.py
+```
+
+Expected: `✅ Seeded: 50 docs → ~180 chunks`
+
+### 10 — Test a query
+
+```powershell
+Invoke-RestMethod http://localhost:8000/query `
+  -Method Post `
+  -Headers @{"Content-Type"="application/json"; "X-API-Key"=$env:NEURORAG_API_KEY} `
+  -Body '{"query":"What is retrieval augmented generation?"}' | ConvertTo-Json -Depth 5
 ```
 
 ---
 
-## Kubernetes Deployment
+## Common Issues & Fixes
 
-```bash
-# Create namespace + secrets
-kubectl create namespace neurorag
-kubectl create secret generic neurorag-secrets \
-  --from-literal=POSTGRES_URL='postgresql://...' \
-  --from-literal=OPENAI_API_KEY='sk-...' \
-  -n neurorag
+| Error | Fix |
+|-------|-----|
+| `uvloop does not support Windows` | Do NOT install uvloop. Use `--workers 1` with uvicorn. |
+| `faiss-gpu==1.7.2 not found` | Already fixed — requirements.txt uses `faiss-cpu` |
+| `numpy.core.multiarray failed to import` | Run: `pip install "numpy==1.26.4" --force-reinstall` |
+| `No module named 'packaging'` | Run: `pip install packaging` |
+| `No module named 'llama_cpp'` | Already fixed — config.yaml uses `provider: "openai"` |
+| `ModuleNotFoundError: No module named 'app'` | Use `uvicorn api.main:app` not `uvicorn app.main:app` |
+| `INSUFFICIENT_CONTEXT` on queries | Run `python scripts/seed_data.py` to populate the index |
+| `NEURORAG_API_KEY not set` | Run `. .\load_env.ps1` and set key in `.env` |
+| `alembic: No module named 'psycopg2'` | Run: `pip install psycopg2-binary` |
 
-# Apply all manifests
-kubectl apply -f infra/k8s/ -n neurorag
+---
 
-# Watch rollout
-kubectl rollout status deployment/neurorag-api -n neurorag
+## Architecture
+
+```
+Query → IntentAnalyzer → Planner → HybridRetriever (BM25 + FAISS) 
+      → Reranker → Generator → Critic
+      → [if confidence < 0.80] → ReflectionAgent → FixerAgent → retry
+      → PipelineResult
 ```
 
----
+## API Endpoints
 
-## Running Tests
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Web UI |
+| GET | `/health` | System health + vector count |
+| POST | `/query` | Submit a RAG query |
+| POST | `/ingest` | Add documents to knowledge base |
+| GET | `/stats` | Query statistics (requires Postgres) |
+| GET | `/env-check` | Which env vars are set |
+| GET | `/circuit-breaker/status` | LLM circuit breaker states |
+| GET | `/memory/stats` | Redis cache stats |
+| GET | `/metrics` | Prometheus metrics |
+| GET | `/docs` | Interactive API docs (Swagger) |
 
-```bash
-pip install -r requirements.txt
-pytest tests/ -v --tb=short --cov=. --cov-report=term-missing
+## Project Structure
+
 ```
-
----
-
-## Monitoring
-
-| URL | Service |
-|-----|---------|
-| http://localhost:3000 | Grafana (admin / admin) |
-| http://localhost:9091 | Prometheus |
-| http://localhost:8080 | Airflow |
-| http://localhost:8000/stats | Live aggregate stats |
-
-### Key Metrics
-
-| Metric | Target |
-|--------|--------|
-| `neurorag_confidence_score` p50 | ≥ 0.90 |
-| `neurorag_query_latency_ms` p95 | ≤ 1500ms |
-| Hallucination rate | ≤ 5% |
-| Retry rate (loops > 1) | ≤ 30% |
-
----
-
-## Configuration Reference
-
-Edit `configs/config.yaml`:
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `self_heal.max_loops` | 3 | Max self-healing iterations |
-| `self_heal.confidence_threshold` | 0.90 | Minimum confidence to accept answer |
-| `retrieval.top_k` | 12 | Documents retrieved before reranking |
-| `reranker.top_k` | 5 | Documents passed to generator |
-| `llm.temperature` | 0.1 | Generator temperature (low = deterministic) |
-
----
-
-## Resume Bullet
-
-> Built **NeuroRAG**, a production-grade autonomous self-healing RAG system achieving >95% answer faithfulness through hybrid retrieval (BM25 + FAISS + RRF fusion), a 7-agent pipeline (Intent → Planner → Generator → Critic → Reflection → Fixer), and an iterative self-healing loop. Deployed on GPU-accelerated Kubernetes with Airflow-driven MLOps (embedding drift detection, canary deploy) and real-time Prometheus/Grafana observability. Reduced hallucination rate from ~18% to <4% through automated critic-driven feedback loops.
+neurorag_final/
+├── api/              FastAPI server + middleware
+├── agents/           IntentAnalyzer, Planner, Generator, Critic, Reflection, Fixer, Memory
+├── rag/              HybridRetriever, IngestionEngine, Reranker, LLMClient, CircuitBreaker
+├── evaluation/       EvaluationRunner, Evaluator, BenchmarkDataset, RAGMetrics
+├── configs/          config.yaml, settings.py
+├── dashboard/        Prometheus metrics
+├── mlops/dags/       Airflow DAGs
+├── infra/            Grafana, Prometheus, K8s, migrations
+├── tests/            Unit + load tests
+├── scripts/          seed_data.py, rebuild_index.py
+├── static/           Web UI (index.html)
+├── data/             FAISS index, Whoosh index (created at runtime)
+├── install_windows.ps1
+├── load_env.ps1
+└── requirements.txt
+```

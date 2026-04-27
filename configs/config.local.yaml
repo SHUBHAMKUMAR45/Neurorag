@@ -1,4 +1,7 @@
-# ─── NeuroRAG Config — Windows / CPU / OpenAI mode ───────────────────────────
+# ─── NeuroRAG Local Dev Config (CPU, no GPU, OpenAI for both LLMs) ───────────
+# Usage: copy over config.yaml when running without Docker/GPU
+#   cp configs/config.local.yaml configs/config.yaml
+
 system:
   name: "NeuroRAG"
   version: "3.0.0"
@@ -6,10 +9,10 @@ system:
   log_level: "INFO"
 
 llm:
-  provider: "openai"
-  model: "gpt-4o-mini"
+  provider: "openai"                       # Use OpenAI; no local model needed
+  model: "gpt-4o-mini"                     # Cheaper/faster than gpt-4-turbo
   temperature: 0.1
-  max_tokens: 2048
+  max_tokens: 1024
   top_p: 0.9
   repeat_penalty: 1.1
   device: "cpu"
@@ -23,32 +26,32 @@ critic_llm:
 embedding:
   model: "sentence-transformers/all-MiniLM-L6-v2"
   batch_size: 32
-  device: "cpu"
+  device: "cpu"                            # CPU embedding — no GPU needed
   normalize: true
   dimension: 384
 
 retrieval:
-  top_k: 15
+  top_k: 8
   hybrid: true
-  bm25_weight: 0.40
-  vector_weight: 0.60
-  chunk_size: 600
-  chunk_overlap: 100
-  max_context_tokens: 6000
+  bm25_weight: 0.35
+  vector_weight: 0.65
+  chunk_size: 512
+  chunk_overlap: 64
+  max_context_tokens: 3000
 
 reranker:
   model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
-  top_k: 8
-  device: "cpu"
+  top_k: 5
+  device: "cpu"                            # CPU reranker
 
 self_heal:
   max_loops: 3
-  confidence_threshold: 0.80
+  confidence_threshold: 0.85              # Slightly relaxed for dev
   failure_cooldown_ms: 100
 
 vector_store:
   backend: "faiss"
-  index_path: "./data/faiss/index.bin"
+  index_path: "./data/faiss/index.bin"    # Relative path — works anywhere
   ids_path: "./data/faiss/ids.json"
   metric: "inner_product"
 
@@ -68,15 +71,15 @@ cache:
 monitoring:
   prometheus_port: 9090
   metrics_path: "/metrics"
-  enable_tracing: false
+  enable_tracing: false                   # Disable Jaeger tracing locally
   jaeger_host: "localhost"
   jaeger_port: 6831
 
 api:
   host: "0.0.0.0"
   port: 8000
-  workers: 1
-  timeout: 120
+  workers: 1                              # Single worker for local dev
+  timeout: 60
   cors_origins: ["*"]
   rate_limit_per_minute: 120
 

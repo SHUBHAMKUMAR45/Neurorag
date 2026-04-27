@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroRAG — Self-Healing RAG System</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --accent2: #1f6feb;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+    --orange: #ffa657; --radius: 8px; --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 56px 1fr; height: 100vh; }
+  .topbar { grid-column: 1/-1; background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 12px; }
+  .topbar .logo { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+  .topbar .tag { background: var(--accent2); color: #fff; font-size: 10px; font-weight: 600;
+    padding: 2px 7px; border-radius: 20px; letter-spacing: 0.5px; }
+  .topbar .status-bar { margin-left: auto; display: flex; gap: 12px; align-items: center; font-size: 12px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.red { background: var(--red); }
+  .dot.yellow { background: var(--yellow); }
+
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-section { padding: 14px 16px 8px; font-size: 10px; font-weight: 700;
+    color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer;
+    font-size: 13px; color: var(--muted); border-left: 3px solid transparent; transition: all 0.15s; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: rgba(88,166,255,0.08); color: var(--accent);
+    border-left-color: var(--accent); }
+  .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+
+  .main { overflow-y: auto; display: flex; flex-direction: column; }
+
+  /* ── Panels ── */
+  .panel { display: none; flex: 1; flex-direction: column; }
+  .panel.active { display: flex; }
+
+  /* ── Chat Panel ── */
+  .chat-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); }
+  .chat-header h2 { font-size: 16px; font-weight: 600; }
+  .chat-header p { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .messages { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+  .msg { display: flex; gap: 12px; max-width: 820px; }
+  .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .avatar.ai { background: linear-gradient(135deg, var(--accent2), var(--purple)); }
+  .avatar.user { background: var(--surface2); border: 1px solid var(--border); }
+  .bubble { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 16px; font-size: 14px; line-height: 1.6; max-width: 680px; }
+  .msg.user .bubble { background: var(--accent2); border-color: transparent; color: #fff; }
+
+  .bubble .meta { display: flex; gap: 12px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 20px; }
+  .badge.conf { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.loops { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .badge.latency { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge.cache { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge.error { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge.insuff { background: rgba(255,166,87,0.15); color: var(--orange); }
+
+  .citations { margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .citations span { background: var(--surface2); padding: 2px 6px; border-radius: 4px;
+    margin-right: 4px; font-family: monospace; }
+
+  .thinking { display: flex; gap: 5px; align-items: center; padding: 8px 0; }
+  .thinking span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+    animation: bounce 1.2s infinite; }
+  .thinking span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-8px)} }
+
+  .input-area { padding: 16px 24px; border-top: 1px solid var(--border); background: var(--surface); }
+  .input-row { display: flex; gap: 10px; }
+  .query-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-size: 14px; padding: 11px 14px; outline: none; resize: none;
+    font-family: var(--font); transition: border-color 0.15s; min-height: 46px; max-height: 140px; }
+  .query-input:focus { border-color: var(--accent); }
+  .send-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+    padding: 0 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .send-btn:hover { opacity: 0.85; }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .quick-prompts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .qp { background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    font-size: 11px; padding: 5px 10px; border-radius: 20px; cursor: pointer; transition: all 0.15s; }
+  .qp:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Stats Panel ── */
+  .panel-inner { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+  .panel-title { font-size: 18px; font-weight: 700; }
+  .panel-subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; }
+  .stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; }
+  .stat-value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Ingest Panel ── */
+  .ingest-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .form-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; display: block; }
+  .form-input { width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text); font-size: 13px; padding: 10px 12px;
+    outline: none; font-family: var(--font); transition: border-color 0.15s; }
+  .form-input:focus { border-color: var(--accent); }
+  textarea.form-input { min-height: 160px; resize: vertical; }
+  .form-row { margin-bottom: 14px; }
+  .btn { padding: 10px 20px; border: none; border-radius: var(--radius); font-size: 13px;
+    font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  .alert { padding: 12px 16px; border-radius: var(--radius); font-size: 13px; margin-top: 12px; }
+  .alert.success { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: var(--green); }
+  .alert.error { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); color: var(--red); }
+  .alert.info { background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3); color: var(--accent); }
+
+  /* ── Health Panel ── */
+  .health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .health-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; display: flex; align-items: center; gap: 14px; }
+  .health-icon { font-size: 24px; }
+  .health-label { font-size: 13px; font-weight: 600; }
+  .health-status { font-size: 11px; margin-top: 3px; }
+  .health-status.ok { color: var(--green); }
+  .health-status.warn { color: var(--yellow); }
+  .health-status.down { color: var(--red); }
+
+  /* ── Settings Panel ── */
+  .settings-form { background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; max-width: 560px; }
+  .settings-note { background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.2);
+    border-radius: var(--radius); padding: 12px 16px; font-size: 12px; color: var(--accent);
+    margin-bottom: 16px; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit:scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Welcome message ── */
+  .welcome { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .welcome h3 { font-size: 20px; color: var(--text); margin-bottom: 8px; }
+  .welcome p { font-size: 13px; line-height: 1.6; max-width: 440px; margin: 0 auto 20px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .chip { background: var(--surface2); border: 1px solid var(--border); padding: 8px 14px;
+    border-radius: var(--radius); font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  @media (max-width: 768px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 56px 48px 1fr; }
+    .sidebar { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    .sidebar-section { display: none; }
+    .nav-item { border-left: none; border-bottom: 3px solid transparent; flex-direction: column;
+      gap: 3px; padding: 8px 14px; font-size: 10px; }
+    .nav-item.active { border-bottom-color: var(--accent); border-left-color: transparent; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <span class="logo">⚡ NeuroRAG</span>
+    <span class="tag">SELF-HEALING</span>
+    <div class="status-bar">
+      <span id="api-dot" class="dot red"></span>
+      <span id="api-status" style="color:var(--muted);font-size:12px">Connecting…</span>
+      <span style="color:var(--border)">|</span>
+      <span id="vectors-label" style="color:var(--muted);font-size:12px">0 vectors</span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-section">Navigation</div>
+    <div class="nav-item active" onclick="showPanel('chat')">
+      <span class="nav-icon">💬</span> Chat
+    </div>
+    <div class="nav-item" onclick="showPanel('ingest')">
+      <span class="nav-icon">📥</span> Ingest Documents
+    </div>
+    <div class="nav-item" onclick="showPanel('stats'); loadStats()">
+      <span class="nav-icon">📊</span> Query Stats
+    </div>
+    <div class="nav-item" onclick="showPanel('health'); loadHealth()">
+      <span class="nav-icon">🔍</span> System Health
+    </div>
+    <div class="nav-item" onclick="showPanel('settings')">
+      <span class="nav-icon">⚙️</span> Settings
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── Chat Panel ── -->
+    <div class="panel active" id="panel-chat">
+      <div class="chat-header">
+        <h2>Query Interface</h2>
+        <p>Ask questions — the self-healing RAG pipeline retrieves, generates, and critiques answers automatically.</p>
+      </div>
+
+      <div class="messages" id="messages">
+        <div class="welcome">
+          <h3>👋 Welcome to NeuroRAG</h3>
+          <p>Ask anything about RAG systems, LLMs, retrieval, embeddings, or system architecture. The multi-agent pipeline will retrieve relevant context and generate a grounded answer.</p>
+          <div class="chips">
+            <div class="chip" onclick="setQuery('What is retrieval-augmented generation and how does it work?')">What is RAG?</div>
+            <div class="chip" onclick="setQuery('How does hybrid retrieval combine BM25 and vector search?')">Hybrid retrieval</div>
+            <div class="chip" onclick="setQuery('How does the self-healing loop improve answer quality?')">Self-healing loop</div>
+            <div class="chip" onclick="setQuery('What is the circuit breaker pattern and when does it trigger?')">Circuit breaker</div>
+            <div class="chip" onclick="setQuery('How does NeuroRAG detect and handle hallucinations?')">Hallucination detection</div>
+            <div class="chip" onclick="setQuery('Explain how the confidence score is calculated in NeuroRAG.')">Confidence scoring</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-row">
+          <textarea class="query-input" id="query-input" placeholder="Ask a question…"
+            rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendQuery()">
+            <span>Send</span> <span>↗</span>
+          </button>
+        </div>
+        <div class="quick-prompts">
+          <span class="qp" onclick="setQuery('What is cross-encoder reranking and why is it better than bi-encoders?')">Reranking</span>
+          <span class="qp" onclick="setQuery('Explain FAISS indexing and how NeuroRAG uses it.')">FAISS indexing</span>
+          <span class="qp" onclick="setQuery('How does Redis caching improve RAG system performance?')">Redis caching</span>
+          <span class="qp" onclick="setQuery('What are the SLO targets for NeuroRAG in production?')">SLOs</span>
+          <span class="qp" onclick="setQuery('How does query decomposition work for multi-hop questions?')">Multi-hop queries</span>
+          <span class="qp" onclick="setQuery('What embedding model does NeuroRAG use and why?')">Embeddings</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Ingest Panel ── -->
+    <div class="panel" id="panel-ingest">
+      <div class="panel-inner">
+        <div>
+          <div class="panel-title">📥 Ingest Documents</div>
+          <div class="panel-subtitle">Add documents to the knowledge base. They will be chunked, embedded, and indexed automatically.</div>
+        </div>
+
+        <div class="ingest-form">
+          <div class="form-row">
+            <label class="form-label">Document ID</label>
+            <input type="text" class="form-input" id="doc-id" placeholder="e.g. my-document-001">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Document Text</label>
+            <textarea class="form-input" id="doc-text" placeholder="Paste the full text of your document here…"></textarea>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Source (optional)</label>
+            <input type="text" class="form-input" id="doc-source" placeholder="e.g. internal-wiki, pdf-upload">
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" id="ingest-btn" onclick="ingestDocument()">Ingest Document</button>
+            <button class="btn btn-secondary" onclick="seedDefault()">Seed Default Data (50 docs)</button>
+          </div>
+          <div id="ingest-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Stats Panel ── -->
+    <div class="panel" id="panel-stats">
+      <div class="panel-inner">
+        <div>
+          <div class="panel-title">📊 Query Statistics</div>
+          <div class="panel-subtitle" id="stats-time">Last 24 hours</div>
+        </div>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="stat-label">Loading…</div></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="loadStats(1)">1h</button>
+          <button class="btn btn-secondary" onclick="loadStats(6)">6h</button>
+          <button class="btn btn-secondary" onclick="loadStats(24)">24h</button>
+          <button class="btn btn-secondary" onclick="loadStats(168)">7d</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Health Panel ── -->
+    <div class="panel" id="panel-health">
+      <div class="panel-inner">
+        <div>
+          <div class="panel-title">🔍 System Health</div>
+          <div class="panel-subtitle">Live status of all NeuroRAG components</div>
+        </div>
+        <div class="health-grid" id="health-grid">
+          <div class="stat-card"><div class="stat-label">Loading…</div></div>
+        </div>
+        <div>
+          <button class="btn btn-secondary" onclick="loadHealth()">↻ Refresh</button>
+        </div>
+        <div>
+          <div class="panel-title" style="font-size:14px;margin-bottom:10px">Circuit Breaker Status</div>
+          <div id="cb-status" class="alert info">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Settings Panel ── -->
+    <div class="panel" id="panel-settings">
+      <div class="panel-inner">
+        <div>
+          <div class="panel-title">⚙️ Settings</div>
+          <div class="panel-subtitle">Configure API connection and authentication</div>
+        </div>
+        <div class="settings-form">
+          <div class="settings-note">
+            💡 Settings are saved to your browser's localStorage. Your API key is only used to authenticate requests — it is never sent anywhere else.
+          </div>
+          <div class="form-row">
+            <label class="form-label">API Base URL</label>
+            <input type="text" class="form-input" id="setting-url" value="http://localhost:8000" placeholder="http://localhost:8000">
+          </div>
+          <div class="form-row">
+            <label class="form-label">API Key (X-API-Key)</label>
+            <input type="password" class="form-input" id="setting-key" placeholder="Your NEURORAG_API_KEY value">
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            <button class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
+          </div>
+          <div id="settings-result"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let BASE_URL = localStorage.getItem('neurorag_url') || 'http://localhost:8000';
+let API_KEY  = localStorage.getItem('neurorag_key') || '';
+let isLoading = false;
+
+document.getElementById('setting-url').value = BASE_URL;
+document.getElementById('setting-key').value = API_KEY;
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ── API helpers ────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (API_KEY) headers['X-API-Key'] = API_KEY;
+  const res = await fetch(BASE_URL + path, { headers, ...opts });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ── Status bar ─────────────────────────────────────────────────────────────
+async function checkStatus() {
+  try {
+    const h = await api('/health');
+    document.getElementById('api-dot').className = 'dot green';
+    document.getElementById('api-status').textContent = 'API Online';
+    document.getElementById('api-status').style.color = 'var(--green)';
+    document.getElementById('vectors-label').textContent = `${h.faiss_vectors} vectors`;
+  } catch {
+    document.getElementById('api-dot').className = 'dot red';
+    document.getElementById('api-status').textContent = 'API Offline';
+    document.getElementById('api-status').style.color = 'var(--red)';
+  }
+}
+checkStatus();
+setInterval(checkStatus, 30000);
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuery(); }
+}
+
+function setQuery(q) {
+  const inp = document.getElementById('query-input');
+  inp.value = q;
+  autoResize(inp);
+  inp.focus();
+  // Remove welcome message
+  const welcome = document.querySelector('.welcome');
+  if (welcome) welcome.remove();
+}
+
+function addMessage(role, content, meta = null) {
+  const msgs = document.getElementById('messages');
+  const welcome = msgs.querySelector('.welcome');
+  if (welcome) welcome.remove();
+
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const avatarHTML = role === 'user'
+    ? `<div class="avatar user">👤</div>`
+    : `<div class="avatar ai">🤖</div>`;
+
+  let metaHTML = '';
+  if (meta) {
+    const confColor = meta.confidence >= 0.8 ? 'conf' : meta.confidence >= 0.5 ? 'loops' : 'error';
+    metaHTML = `<div class="meta">
+      <span class="badge ${confColor}">⚡ Conf: ${(meta.confidence * 100).toFixed(0)}%</span>
+      <span class="badge loops">🔄 Loops: ${meta.loops}</span>
+      <span class="badge latency">⏱ ${meta.latency_ms}ms</span>
+      ${meta.from_memory_cache ? '<span class="badge cache">📦 Cached</span>' : ''}
+      ${meta.insufficient_context ? '<span class="badge insuff">⚠️ Insufficient Context</span>' : ''}
+    </div>`;
+    if (meta.citations && meta.citations.length > 0) {
+      metaHTML += `<div class="citations">📎 Sources: ${meta.citations.map(c => `<span>${c}</span>`).join('')}</div>`;
+    }
+  }
+
+  div.innerHTML = avatarHTML + `<div class="bubble">${escapeHtml(content)}${metaHTML}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function addThinking() {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.id = 'thinking-msg';
+  div.innerHTML = `<div class="avatar ai">🤖</div>
+    <div class="bubble"><div class="thinking"><span></span><span></span><span></span></div></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeThinking() {
+  const t = document.getElementById('thinking-msg');
+  if (t) t.remove();
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+async function sendQuery() {
+  const inp = document.getElementById('query-input');
+  const query = inp.value.trim();
+  if (!query || isLoading) return;
+
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+  inp.value = '';
+  inp.style.height = 'auto';
+
+  addMessage('user', query);
+  addThinking();
+
+  try {
+    const data = await api('/query', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    });
+    removeThinking();
+    addMessage('ai', data.answer, data);
+  } catch (err) {
+    removeThinking();
+    addMessage('ai', `❌ Error: ${err.message}\n\nMake sure the API is running and your API key is set in Settings.`);
+  }
+
+  isLoading = false;
+  document.getElementById('send-btn').disabled = false;
+  inp.focus();
+}
+
+// ── Ingest ─────────────────────────────────────────────────────────────────
+async function ingestDocument() {
+  const id   = document.getElementById('doc-id').value.trim();
+  const text = document.getElementById('doc-text').value.trim();
+  const src  = document.getElementById('doc-source').value.trim();
+  const res  = document.getElementById('ingest-result');
+
+  if (!id || !text) {
+    res.innerHTML = '<div class="alert error">Document ID and text are required.</div>';
+    return;
+  }
+
+  document.getElementById('ingest-btn').disabled = true;
+  res.innerHTML = '<div class="alert info">Ingesting…</div>';
+
+  try {
+    const data = await api('/ingest', {
+      method: 'POST',
+      body: JSON.stringify({
+        documents: [{ id, text, metadata: { source: src || 'ui-upload' } }]
+      }),
+    });
+    res.innerHTML = `<div class="alert success">✅ Ingested ${data.doc_count} doc → ${data.chunks_indexed} chunks indexed.</div>`;
+    document.getElementById('doc-id').value = '';
+    document.getElementById('doc-text').value = '';
+    document.getElementById('doc-source').value = '';
+    checkStatus();
+  } catch (err) {
+    res.innerHTML = `<div class="alert error">❌ ${err.message}</div>`;
+  }
+  document.getElementById('ingest-btn').disabled = false;
+}
+
+async function seedDefault() {
+  const res = document.getElementById('ingest-result');
+  res.innerHTML = '<div class="alert info">Running seed script via API… this may take 30–60 seconds.</div>';
+  try {
+    const data = await api('/ingest', {
+      method: 'POST',
+      body: JSON.stringify({ documents: [] }), // triggers graceful no-op
+    });
+    res.innerHTML = '<div class="alert info">ℹ️ To seed the full 50-document dataset, run: <br><code>python scripts/seed_data.py</code> in the project folder.</div>';
+  } catch {
+    res.innerHTML = '<div class="alert info">ℹ️ To seed the full 50-document dataset, run: <br><code>python scripts/seed_data.py</code> in the project folder.</div>';
+  }
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+async function loadStats(hours = 24) {
+  document.getElementById('stats-time').textContent = `Last ${hours} hour${hours > 1 ? 's' : ''}`;
+  const grid = document.getElementById('stats-grid');
+  grid.innerHTML = '<div class="stat-card"><div class="stat-label">Loading…</div></div>';
+
+  try {
+    const s = await api(`/stats?hours=${hours}`);
+    const fmt = (v, d=2) => v == null ? 'N/A' : parseFloat(v).toFixed(d);
+
+    grid.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">Total Queries</div>
+        <div class="stat-value" style="color:var(--accent)">${s.total_queries ?? 0}</div>
+        <div class="stat-sub">last ${hours}h</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Confidence</div>
+        <div class="stat-value" style="color:var(--green)">${fmt((s.avg_confidence||0)*100, 1)}%</div>
+        <div class="stat-sub">critic score</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">p95 Latency</div>
+        <div class="stat-value" style="color:var(--yellow)">${fmt(s.p95_latency_ms, 0)}ms</div>
+        <div class="stat-sub">SLO target ≤ 1500ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Loops</div>
+        <div class="stat-value" style="color:var(--purple)">${fmt(s.avg_loops)}</div>
+        <div class="stat-sub">self-healing iterations</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Hallucination Rate</div>
+        <div class="stat-value" style="color:${(s.hallucination_rate||0) > 0.1 ? 'var(--red)' : 'var(--green)'}">${fmt((s.hallucination_rate||0)*100, 1)}%</div>
+        <div class="stat-sub">target < 10%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cache Hit Rate</div>
+        <div class="stat-value" style="color:var(--accent)">${fmt((s.cache_hit_rate||0)*100, 1)}%</div>
+        <div class="stat-sub">Redis cache</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Faithfulness</div>
+        <div class="stat-value" style="color:var(--green)">${fmt((s.avg_faithfulness||0)*100, 1)}%</div>
+        <div class="stat-sub">target ≥ 85%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Insufficient Rate</div>
+        <div class="stat-value" style="color:${(s.insufficient_rate||0)>0.1?'var(--red)':'var(--muted)'}">${fmt((s.insufficient_rate||0)*100, 1)}%</div>
+        <div class="stat-sub">no-context responses</div>
+      </div>
+    `;
+  } catch (err) {
+    grid.innerHTML = `<div class="alert error">Failed to load stats: ${err.message}<br><small>Stats require PostgreSQL. The API works without it.</small></div>`;
+  }
+}
+
+// ── Health ─────────────────────────────────────────────────────────────────
+async function loadHealth() {
+  const grid = document.getElementById('health-grid');
+  const cb   = document.getElementById('cb-status');
+  grid.innerHTML = '<div class="stat-card"><div class="stat-label">Loading…</div></div>';
+
+  try {
+    const h = await api('/health');
+    const env = await api('/env-check');
+
+    grid.innerHTML = `
+      <div class="health-card">
+        <span class="health-icon">🚀</span>
+        <div>
+          <div class="health-label">API Server</div>
+          <div class="health-status ok">Online — v${h.version}</div>
+        </div>
+      </div>
+      <div class="health-card">
+        <span class="health-icon">🧠</span>
+        <div>
+          <div class="health-label">FAISS Index</div>
+          <div class="health-status ${h.faiss_vectors > 0 ? 'ok' : 'warn'}">${h.faiss_vectors} vectors ${h.faiss_vectors === 0 ? '— run seed_data.py' : ''}</div>
+        </div>
+      </div>
+      <div class="health-card">
+        <span class="health-icon">📦</span>
+        <div>
+          <div class="health-label">Redis Cache</div>
+          <div class="health-status ${env.redis_connected ? 'ok' : 'warn'}">${env.redis_connected ? 'Connected' : 'Offline — caching disabled'}</div>
+        </div>
+      </div>
+      <div class="health-card">
+        <span class="health-icon">🗄️</span>
+        <div>
+          <div class="health-label">PostgreSQL</div>
+          <div class="health-status ${env.postgres_connected ? 'ok' : 'warn'}">${env.postgres_connected ? 'Connected' : 'Offline — logging disabled'}</div>
+        </div>
+      </div>
+      <div class="health-card">
+        <span class="health-icon">🔑</span>
+        <div>
+          <div class="health-label">OpenAI API Key</div>
+          <div class="health-status ${env.OPENAI_API_KEY ? 'ok' : 'down'}">${env.OPENAI_API_KEY ? 'Set ✓' : 'Missing — queries will fail'}</div>
+        </div>
+      </div>
+      <div class="health-card">
+        <span class="health-icon">🛡️</span>
+        <div>
+          <div class="health-label">API Key Auth</div>
+          <div class="health-status ${env.NEURORAG_API_KEY ? 'ok' : 'warn'}">${env.NEURORAG_API_KEY ? 'Enabled ✓' : 'Bypassed (dev mode)'}</div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    grid.innerHTML = `<div class="alert error">Cannot reach API at ${BASE_URL}.<br>${err.message}</div>`;
+  }
+
+  try {
+    const cbData = await api('/circuit-breaker/status');
+    cb.className = 'alert info';
+    cb.innerHTML = `Generator: <strong>${cbData.generator}</strong> &nbsp;|&nbsp; Critic: <strong>${cbData.critic}</strong>`;
+  } catch {
+    cb.className = 'alert error';
+    cb.textContent = 'Circuit breaker status unavailable.';
+  }
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────
+function saveSettings() {
+  BASE_URL = document.getElementById('setting-url').value.trim().replace(/\/$/, '');
+  API_KEY  = document.getElementById('setting-key').value.trim();
+  localStorage.setItem('neurorag_url', BASE_URL);
+  localStorage.setItem('neurorag_key', API_KEY);
+  document.getElementById('settings-result').innerHTML =
+    '<div class="alert success">✅ Settings saved.</div>';
+  checkStatus();
+}
+
+async function testConnection() {
+  BASE_URL = document.getElementById('setting-url').value.trim().replace(/\/$/, '');
+  API_KEY  = document.getElementById('setting-key').value.trim();
+  const res = document.getElementById('settings-result');
+  res.innerHTML = '<div class="alert info">Testing…</div>';
+  try {
+    const h = await api('/health');
+    res.innerHTML = `<div class="alert success">✅ Connected — API v${h.version}, ${h.faiss_vectors} vectors in FAISS index.</div>`;
+  } catch (err) {
+    res.innerHTML = `<div class="alert error">❌ Connection failed: ${err.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>

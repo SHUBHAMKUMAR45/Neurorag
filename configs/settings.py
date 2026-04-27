@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LLMConfig(BaseModel):
@@ -101,6 +101,9 @@ class SecurityConfig(BaseModel):
 
 
 class NeuroRAGConfig(BaseModel):
+    # Ignore the top-level `system:` block and any future unknown keys
+    model_config = ConfigDict(extra="ignore")
+
     llm: LLMConfig
     critic_llm: LLMConfig
     embedding: EmbeddingConfig
