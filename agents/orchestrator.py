@@ -56,15 +56,15 @@ class NeuroRAGOrchestrator:
         raw_llm = llm or build_llm_client()
         raw_critic = critic_llm or build_critic_llm_client()
 
-        _llm = wrap_with_circuit_breaker(raw_llm, name="generator", failure_threshold=5)
-        _critic_llm = wrap_with_circuit_breaker(raw_critic, name="critic", failure_threshold=3)
+        self._generator_breaker = wrap_with_circuit_breaker(raw_llm, name="generator", failure_threshold=5)
+        self._critic_breaker = wrap_with_circuit_breaker(raw_critic, name="critic", failure_threshold=3)
 
-        self._intent_analyzer = IntentAnalyzer(_llm)
-        self._planner = Planner(_llm)
+        self._intent_analyzer = IntentAnalyzer(self._generator_breaker)
+        self._planner = Planner(self._generator_breaker)
         self._retriever = HybridRetriever(engine)
         self._reranker = Reranker()
-        self._generator = Generator(_llm)
-        self._critic = Critic(_critic_llm)
+        self._generator = Generator(self._generator_breaker)
+        self._critic = Critic(self._critic_breaker)
         self._reflection = ReflectionAgent()
         self._fixer = FixerAgent()
         self._evaluator = Evaluator()
@@ -73,6 +73,14 @@ class NeuroRAGOrchestrator:
 
         self._max_loops: int = sh.max_loops
         self._threshold: float = sh.confidence_threshold
+
+    @property
+    def generator_breaker(self):
+        return self._generator_breaker
+
+    @property
+    def critic_breaker(self):
+        return self._critic_breaker
 
     async def run(self, query: str) -> PipelineResult:
         t_start = time.monotonic()
@@ -208,8 +216,12 @@ class NeuroRAGOrchestrator:
             context_hint_applied=bool(hint.recommended_fix_action or hint.recommended_top_k_boost),
         )
 
-        asyncio.create_task(self._evaluator.log_result(result))  # noqa: RUF006
-        asyncio.create_task(self._adaptive_ctx.record_result(query, result))  # noqa: RUF006
+        for task_coro in (
+            self._evaluator.log_result(result),
+            self._adaptive_ctx.record_result(query, result),
+        ):
+            if asyncio.iscoroutine(task_coro):
+                asyncio.create_task(task_coro)
         return result
 
     async def _retrieve_all(self, sub_queries: list[str], top_k: int, strategy: str) -> list[Document]:

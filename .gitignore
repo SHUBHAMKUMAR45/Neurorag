@@ -86,3 +86,6 @@ docker-compose.override.yml
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Cloned external repos
+SpaceSDK/

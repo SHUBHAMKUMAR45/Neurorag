@@ -140,8 +140,9 @@ _postgres_ok = False
 # ─────────────────────────────────────────────────────────────
 
 _PII_PATTERNS = [
-    _re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
-    _re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+    _re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # SSN
+    _re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),  # Email
+    _re.compile(r"\b\d{3}-\d{3}-\d{4}\b"),  # Phone
 ]
 
 def _filter_pii(text: str) -> str:
@@ -158,7 +159,7 @@ async def _cache_get(key: str):
     if _redis_ok and _redis:
         try:
             return await _redis.get(key)
-        except:
+        except Exception:  # noqa: BLE001
             pass
     return None
 
@@ -167,7 +168,7 @@ async def _cache_set(key: str, value: str, ttl: int = 3600):
     if _redis_ok and _redis:
         try:
             await _redis.setex(key, ttl, value)
-        except:
+        except Exception:  # noqa: BLE001
             pass
 
 
@@ -218,7 +219,7 @@ async def lifespan(app: FastAPI):
     # Metrics
     try:
         start_metrics_server(port=_cfg.monitoring.prometheus_port)
-    except:
+    except Exception:  # noqa: BLE001
         pass
 
     FAISS_INDEX_SIZE.set(len(_engine.doc_ids))
@@ -352,7 +353,7 @@ async def ingest(req: IngestRequest):
 async def health():
     return HealthResponse(
         status="ok",
-        version="3.2",
+        version=_cfg.system.version,
         faiss_vectors=len(_engine.doc_ids),
         redis_connected=_redis_ok,
         postgres_connected=_postgres_ok,
@@ -372,6 +373,67 @@ async def env_check():
         "redis_connected": _redis_ok,
         "postgres_connected": _postgres_ok,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# Stats
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/stats")
+async def get_stats(hours: int = 24):
+    if not _evaluator:
+        raise HTTPException(503, "System not ready")
+    try:
+        stats_data = await _evaluator.get_stats(window_hours=hours)
+        return stats_data
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+# ─────────────────────────────────────────────────────────────
+# Memory Stats
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/memory/stats")
+async def get_memory_stats():
+    if not _redis_ok or not _redis:
+        return {
+            "redis_connected": False,
+            "keys_count": 0,
+            "qmem_keys": 0,
+            "qemb_keys": 0,
+            "fail_keys": 0,
+        }
+    try:
+        qmem_keys = len(await _redis.keys("qmem:*"))
+        qemb_keys = len(await _redis.keys("qemb:*"))
+        fail_keys = len(await _redis.keys("mem:fail:*"))
+        return {
+            "redis_connected": True,
+            "keys_count": qmem_keys + qemb_keys + fail_keys,
+            "qmem_keys": qmem_keys,
+            "qemb_keys": qemb_keys,
+            "fail_keys": fail_keys,
+        }
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+# ─────────────────────────────────────────────────────────────
+# Circuit Breaker Status
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/circuit-breaker/status")
+async def get_circuit_breaker_status():
+    if not _orchestrator:
+        raise HTTPException(503, "System not ready")
+    try:
+        return {
+            "generator": _orchestrator.generator_breaker.state.value,
+            "critic": _orchestrator.critic_breaker.state.value,
+        }
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
 
 
 # ─────────────────────────────────────────────────────────────

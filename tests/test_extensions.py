@@ -87,7 +87,8 @@ class TestQueryMemoryStore:
             query="capital of France?", answer="Paris is the capital of France.",
             citations=["doc1#0"], confidence=0.97, loops=1, latency_ms=300,
         )
-        await store._store_redis(result.__class__(
+        from agents.memory import MemoryEntry
+        entry = MemoryEntry(
             query_hash=store._hash(result.query),
             query=result.query,
             answer=result.answer,
@@ -96,7 +97,8 @@ class TestQueryMemoryStore:
             loops=result.loops,
             latency_ms=result.latency_ms,
             failure_types=[],
-        ) if False else result)  # uses store.store path
+        )
+        await store._store_redis(entry)
         # store won't actually call _store_redis without confidence >=threshold
         # but redis setex should not have been called with low conf
 
@@ -320,15 +322,13 @@ class TestCircuitBreaker:
     async def test_exponential_backoff_retries(self):
         from rag.circuit_breaker import CircuitBreakerLLMClient
         call_times = []
-        class TimedClient:
+        from rag.llm_client import BaseLLMClient
+        class TimedClient(BaseLLMClient):
             def complete(self, *a, **k):
                 call_times.append(time.monotonic())
                 raise RuntimeError("always fail")
             async def acomplete(self, *a, **k):
                 return self.complete()
-
-        from rag.llm_client import BaseLLMClient
-        TimedClient.__bases__ = (BaseLLMClient,)
 
         cb = CircuitBreakerLLMClient(
             TimedClient(), failure_threshold=10, max_retries=3,

@@ -39,6 +39,9 @@ def mock_llm():
     """Mock LLM client that returns configurable responses."""
     client = MagicMock()
     client.complete = MagicMock()
+    async def acomplete(prompt, system="", temperature=0.1, max_tokens=1024):
+        return client.complete(prompt, system, temperature, max_tokens)
+    client.acomplete = acomplete
     return client
 
 
@@ -352,6 +355,9 @@ class TestFullPipeline:
             "confidence": 0.95, "failure_type": "none",
             "hallucination_detected": False, "notes": "",
         })
+        async def critic_acomplete(prompt, system="", temperature=0.1, max_tokens=1024):
+            return mock_critic_llm.complete(prompt, system, temperature, max_tokens)
+        mock_critic_llm.acomplete = critic_acomplete
 
         with patch("agents.orchestrator.HybridRetriever") as MockRetriever, \
              patch("agents.orchestrator.Reranker") as MockReranker, \
@@ -390,6 +396,9 @@ class TestFullPipeline:
             "confidence": 0.5, "failure_type": "missing_context",
             "hallucination_detected": False, "notes": "No supporting context.",
         })
+        async def critic_acomplete(prompt, system="", temperature=0.1, max_tokens=1024):
+            return mock_critic_llm.complete(prompt, system, temperature, max_tokens)
+        mock_critic_llm.acomplete = critic_acomplete
 
         with patch("agents.orchestrator.HybridRetriever") as MockRetriever, \
              patch("agents.orchestrator.Reranker") as MockReranker, \

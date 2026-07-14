@@ -306,7 +306,7 @@ class TestSelfHealingValidator:
     async def test_domain_breakdown_present(self):
         from evaluation.self_healing_validator import SelfHealingValidator
         from evaluation.benchmark_dataset import load_benchmark
-        samples = load_benchmark(max_samples=15)
+        samples = load_benchmark(max_samples=15, shuffle=True, seed=42)
         v = SelfHealingValidator(_mock_pipeline, confidence_threshold=0.85, concurrency=5)
         report = await v.validate(samples)
         assert len(report.improvement_by_domain) >= 2
@@ -380,7 +380,7 @@ class TestLoadTestInfrastructure:
     def test_locust_classes_importable(self):
         """Locust user classes exist (may not import without locust installed)."""
         import ast
-        with open("tests/test_load_production.py") as f:
+        with open("tests/test_load_production.py", encoding="utf-8") as f:
             tree = ast.parse(f.read())
         class_names = [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
         assert "NeuroRAGUser50" in class_names
@@ -397,7 +397,7 @@ class TestClosedLoopMLOps:
 
     def test_closed_loop_dag_syntax(self):
         import ast
-        with open("mlops/dags/closed_loop.py") as f:
+        with open("mlops/dags/closed_loop.py", encoding="utf-8") as f:
             tree = ast.parse(f.read())
         # Verify both DAGs are defined via 'with DAG(...)' context managers
         dag_ids = []
@@ -449,15 +449,15 @@ assert _faithfulness_threshold("0.70") == 0.70
 
     def test_all_required_task_functions_exist(self):
         import ast
-        with open("mlops/dags/closed_loop.py") as f:
+        with open("mlops/dags/closed_loop.py", encoding="utf-8") as f:
             tree = ast.parse(f.read())
         func_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
         required = {
-            "_record_pre_metrics", "_backup_artefacts", "_rebuild_index",
-            "_validate_index", "_post_retrain_eval", "_compare_before_after",
+            "_record_baseline", "_backup_artefacts", "_rebuild_index",
+            "_validate_rebuilt_index", "_run_post_retrain_eval", "_compare_before_after",
             "_promote_new_index", "_rollback_to_backup",
             "_rollback_on_validate_failure", "_trigger_retrain",
-            "_check_faithfulness", "_run_eval",
+            "_check_faithfulness", "_run_evaluation",
         }
         missing = required - func_names
         assert not missing, f"Missing task functions: {missing}"
