@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class LLMConfig(BaseModel):
-    provider: Literal["local", "openai"]
+    provider: Literal["local", "openai", "gemini"]
     model: str
     temperature: float
     max_tokens: int

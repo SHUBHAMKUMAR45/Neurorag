@@ -148,6 +148,74 @@ class OpenAIClient(BaseLLMClient):
         return response.choices[0].message.content
 
 
+class GeminiClient(BaseLLMClient):
+    """
+    Google Gemini API client.
+    Requires GEMINI_API_KEY env var.
+    """
+
+    def __init__(self, cfg: LLMConfig) -> None:
+        import google.generativeai as genai  # type: ignore[import]
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            api_key = os.environ.get("OPENAI_API_KEY")  # fallback or developer key
+        genai.configure(api_key=api_key)
+        self._model_name = cfg.model
+        self._cfg = cfg
+        self._model = genai.GenerativeModel(self._model_name)
+        logger.info("GeminiClient: model=%s", self._model_name)
+
+    def complete(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.1,
+        max_tokens: int = 1024,
+    ) -> str:
+        import google.generativeai as genai
+        generation_config = {
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        }
+        if system:
+            model = genai.GenerativeModel(
+                model_name=self._model_name,
+                system_instruction=system
+            )
+        else:
+            model = self._model
+        response = model.generate_content(
+            prompt,
+            generation_config=generation_config
+        )
+        return response.text
+
+    async def acomplete(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.1,
+        max_tokens: int = 1024,
+    ) -> str:
+        import google.generativeai as genai
+        generation_config = {
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        }
+        if system:
+            model = genai.GenerativeModel(
+                model_name=self._model_name,
+                system_instruction=system
+            )
+        else:
+            model = self._model
+        response = await model.generate_content_async(
+            prompt,
+            generation_config=generation_config
+        )
+        return response.text
+
+
 def build_llm_client(cfg: Optional[LLMConfig] = None) -> BaseLLMClient:
     if cfg is None:
         cfg = get_config().llm
@@ -155,6 +223,8 @@ def build_llm_client(cfg: Optional[LLMConfig] = None) -> BaseLLMClient:
         return OpenAIClient(cfg)
     if cfg.provider == "local":
         return LocalLLaMAClient(cfg)
+    if cfg.provider == "gemini":
+        return GeminiClient(cfg)
     raise ValueError(f"Unknown LLM provider: {cfg.provider}")
 
 
