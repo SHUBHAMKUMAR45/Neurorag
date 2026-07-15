@@ -1,1 +1,0 @@
-# NeuroRAG package root
