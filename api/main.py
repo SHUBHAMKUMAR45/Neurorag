@@ -224,7 +224,7 @@ async def lifespan(app: FastAPI):
         _engine.save()
 
     if _redis_ok and _redis:
-        await _redis.aclose()
+        await _redis.close()
 
     log.info("Shutdown complete")
 

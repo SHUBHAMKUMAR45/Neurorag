@@ -330,7 +330,7 @@ async def _main_async(args: argparse.Namespace) -> None:
         from rag.ingest import IngestionEngine
 
         engine = IngestionEngine()
-        orchestrator = NeuroRAGOrchestrator(engine)
+        orchestrator: Any = NeuroRAGOrchestrator(engine)
         logger.info("Using real NeuroRAG orchestrator.")
     except Exception as exc:
         logger.warning("Could not load real orchestrator (%s); using mock.", exc)

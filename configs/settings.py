@@ -120,8 +120,8 @@ class NeuroRAGConfig(BaseModel):
 
 
 def _resolve_env(obj: dict) -> dict:
-    """Recursively resolve ${ENV_VAR} references in config values."""
-    resolved = {}
+    from typing import Any
+    resolved: dict[Any, Any] = {}
     for k, v in obj.items():
         if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
             env_key = v[2:-1]

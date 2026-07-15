@@ -5,6 +5,8 @@ Added: graceful OpenTelemetry degradation
 """
 from __future__ import annotations
 
+from typing import Any
+
 import asyncio
 import hashlib
 import logging
@@ -28,7 +30,7 @@ except ImportError:
     trace = None  # type: ignore[assignment]
 
 
-def setup_tracing(service_name: str = "neurorag-api") -> object | None:
+def setup_tracing(service_name: str = "neurorag-api") -> Any:
     if not _OTEL_AVAILABLE:
         logger.info("OpenTelemetry not installed; tracing disabled.")
         return None
@@ -110,7 +112,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 # ─── Tracing Middleware ───────────────────────────────────────────────────────
 
 class TracingMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, tracer: object | None = None) -> None:
+    def __init__(self, app: ASGIApp, tracer: Any = None) -> None:
         super().__init__(app)
         self._tracer = tracer
 

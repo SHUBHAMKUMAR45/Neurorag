@@ -228,7 +228,7 @@ class NeuroRAGOrchestrator:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         seen: dict[str, Document] = {}
         for res in results:
-            if isinstance(res, Exception):
+            if isinstance(res, BaseException):
                 logger.warning("Retrieval failed for sub-query: %s", res)
                 continue
             for doc in res:
