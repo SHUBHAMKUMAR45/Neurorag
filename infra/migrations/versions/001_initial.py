@@ -1,13 +1,13 @@
 """Initial schema: queries, eval_metrics, query_memory tables
 
 Revision ID: 001_initial
-Revises: 
+Revises:
 Create Date: 2026-04-13 00:00:00
 """
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "001_initial"

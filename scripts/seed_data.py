@@ -5,6 +5,7 @@ Ingests 50 rich documents covering RAG, ML, NLP, and system design topics.
 Run: python scripts/seed_data.py
 """
 from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path

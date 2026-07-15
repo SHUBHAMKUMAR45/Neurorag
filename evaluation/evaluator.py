@@ -6,7 +6,7 @@ Exposes offline eval and live stats with full metric breakdown.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from agents.schemas import CriticResult, PipelineResult
 
@@ -21,6 +21,7 @@ class Evaluator:
         if self._pool is None:
             try:
                 import asyncpg
+
                 from configs.settings import get_config
                 self._pool = await asyncpg.create_pool(
                     get_config().database.postgres_url, min_size=2, max_size=10)
@@ -65,7 +66,7 @@ class Evaluator:
     async def log_result(
         self,
         result: PipelineResult,
-        critic_result: Optional[CriticResult] = None,
+        critic_result: CriticResult | None = None,
     ) -> None:
         pool = await self._get_pool()
         if pool is None:

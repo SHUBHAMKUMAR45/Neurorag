@@ -7,10 +7,8 @@ Run: pytest tests/test_extensions.py -v --tb=short
 from __future__ import annotations
 
 import asyncio
-import json
 import time
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -21,9 +19,7 @@ from agents.schemas import (
     FailureType,
     FixAction,
     PipelineResult,
-    QueryType,
 )
-
 
 # ════════════════════════════════════════════════════════════════════════════
 # MEMORY LAYER TESTS
@@ -132,7 +128,8 @@ class TestFailureMemory:
         mock_redis = AsyncMock()
 
         async def _hset(key, field, value):
-            if key not in _store: _store[key] = {}
+            if key not in _store:
+                _store[key] = {}
             _store[key][field] = value
 
         async def _hget(key, field):
@@ -160,7 +157,8 @@ class TestFailureMemory:
         mock_redis = AsyncMock()
 
         async def _hset(key, field, value):
-            if key not in _store: _store[key] = {}
+            if key not in _store:
+                _store[key] = {}
             _store[key][field] = value
 
         async def _hget(key, field):
@@ -202,7 +200,7 @@ class TestAdaptiveContext:
 
     @pytest.mark.asyncio
     async def test_build_hint_with_cache_hit(self):
-        from agents.memory import AdaptiveContext, QueryMemoryStore, MemoryEntry
+        from agents.memory import AdaptiveContext, MemoryEntry
         ctx = AdaptiveContext()
 
         # Inject a cache hit
@@ -254,7 +252,7 @@ class TestCircuitBreaker:
 
     @pytest.mark.asyncio
     async def test_opens_after_threshold_failures(self):
-        from rag.circuit_breaker import CircuitBreakerLLMClient, CircuitBreakerOpen
+        from rag.circuit_breaker import CircuitBreakerLLMClient, CircuitBreakerOpenError
         client = self._make_client(fail_count=99)
         cb = CircuitBreakerLLMClient(
             client, failure_threshold=3, max_retries=1,
@@ -267,8 +265,8 @@ class TestCircuitBreaker:
 
         assert cb.state == CircuitState.OPEN
 
-        # Next call should raise CircuitBreakerOpen immediately
-        with pytest.raises(CircuitBreakerOpen):
+        # Next call should raise CircuitBreakerOpenError immediately
+        with pytest.raises(CircuitBreakerOpenError):
             await cb.acomplete("prompt")
 
     @pytest.mark.asyncio
@@ -476,7 +474,7 @@ class TestSchemaCompleteness:
 
     def test_all_failure_types_have_fix_action_mapping(self):
         from agents.reflection_fixer import ReflectionAgent
-        from agents.schemas import CriticResult, FailureType
+        from agents.schemas import FailureType
         agent = ReflectionAgent()
         for ft in FailureType:
             critique = CriticResult(

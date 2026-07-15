@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import json
 import random
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 # ────────────────────────────────────────────────────────────────────────────
 # DATASET  (300 entries across 3 domains)

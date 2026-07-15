@@ -24,7 +24,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -67,8 +67,8 @@ class ContextHint:
     Injected into each pipeline run to pre-bias retrieval/generation
     based on learned memory signals.
     """
-    similar_past_answer: Optional[str] = None
-    recommended_fix_action: Optional[FixAction] = None
+    similar_past_answer: str | None = None
+    recommended_fix_action: FixAction | None = None
     recommended_top_k_boost: int = 0
     prior_failure_types: list[str] = field(default_factory=list)
     confidence_floor: float = 0.0
@@ -100,7 +100,7 @@ class QueryMemoryStore:
 
     # ── Public API ──────────────────────────────────────────────────────────
 
-    async def lookup(self, query: str) -> Optional[MemoryEntry]:
+    async def lookup(self, query: str) -> MemoryEntry | None:
         """
         Check if a high-confidence cached answer exists for this query.
         Returns None on cache miss or if cached confidence < threshold.
@@ -172,7 +172,7 @@ class QueryMemoryStore:
         emb_key = self._EMBED_PREFIX + entry.query_hash
         await redis.setex(emb_key, self._cfg.cache.ttl_seconds, json.dumps(emb.tolist()))
 
-    async def _semantic_lookup(self, redis: Any, query: str) -> Optional[MemoryEntry]:
+    async def _semantic_lookup(self, redis: Any, query: str) -> MemoryEntry | None:
         """Scan recent embedding keys and find cosine-similar queries."""
         try:
             q_emb = self._embed(query)
@@ -181,7 +181,7 @@ class QueryMemoryStore:
                 return None
 
             best_sim = 0.0
-            best_hash: Optional[str] = None
+            best_hash: str | None = None
 
             for emb_key in keys[:200]:   # Cap scan at 200 for latency
                 raw_emb = await redis.get(emb_key)
@@ -319,7 +319,7 @@ class FailureMemory:
         self,
         query: str,
         failure_type: FailureType,
-    ) -> Optional[FixAction]:
+    ) -> FixAction | None:
         """
         Return a previously successful fix action for this failure type,
         or None if no history exists.
@@ -390,7 +390,7 @@ class AdaptiveContext:
         prior_failures = await self._fail_mem.get_prior_failures(query)
 
         # If there's a dominant prior failure, pre-recommend a fix
-        recommended_action: Optional[FixAction] = None
+        recommended_action: FixAction | None = None
         top_k_boost = 0
         for ft_str in prior_failures:
             try:
@@ -410,7 +410,7 @@ class AdaptiveContext:
             prior_failure_types=prior_failures,
         )
 
-    async def record_result(self, query: str, result: "PipelineResult") -> None:
+    async def record_result(self, query: str, result: PipelineResult) -> None:
         """Called after each pipeline completes; updates both stores."""
         import asyncio
         await asyncio.gather(
@@ -419,7 +419,7 @@ class AdaptiveContext:
             return_exceptions=True,
         )
 
-    async def _record_failures(self, query: str, result: "PipelineResult") -> None:
+    async def _record_failures(self, query: str, result: PipelineResult) -> None:
         """Record fix outcomes for failure learning."""
         final_success = result.confidence >= get_config().self_heal.confidence_threshold
         for ft in result.failure_history:

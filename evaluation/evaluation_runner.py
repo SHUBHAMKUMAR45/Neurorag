@@ -20,10 +20,9 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +66,8 @@ class EvaluationRunner:
         from evaluation.rag_metrics import (
             GenerationSample,
             compute_generation_metrics,
-            log_generation_metrics_to_prometheus,
             context_relevance_score,
+            log_generation_metrics_to_prometheus,
         )
         from evaluation.self_healing_validator import (
             SelfHealingValidator,
@@ -215,7 +214,10 @@ class EvaluationRunner:
         }
 
     def _metrics_by_domain(self, samples: list[dict], results: list[Any]) -> dict:
-        from evaluation.rag_metrics import token_f1, GenerationSample, compute_generation_metrics
+        from evaluation.rag_metrics import (
+            GenerationSample,
+            compute_generation_metrics,
+        )
 
         domains: dict[str, dict] = {}
         for sample, result in zip(samples, results):
@@ -324,8 +326,8 @@ async def _main_async(args: argparse.Namespace) -> None:
         import sys
         sys.path.insert(0, str(Path(__file__).parent.parent))
 
-        from rag.ingest import IngestionEngine
         from agents.orchestrator import NeuroRAGOrchestrator
+        from rag.ingest import IngestionEngine
 
         engine = IngestionEngine()
         orchestrator = NeuroRAGOrchestrator(engine)
@@ -335,7 +337,8 @@ async def _main_async(args: argparse.Namespace) -> None:
 
         class _MockResult:
             def __init__(self, q: str) -> None:
-                import random, uuid
+                import random
+                import uuid
                 self.request_id = str(uuid.uuid4())
                 self.query = q
                 self.answer = f"Mock answer for: {q}"

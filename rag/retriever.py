@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 
 import numpy as np
 from whoosh.qparser import MultifieldParser, OrGroup
@@ -56,7 +55,6 @@ class HybridRetriever:
             List of Documents sorted by fused relevance score (descending).
         """
         k = top_k or self._cfg.retrieval.top_k
-        cfg = self._cfg.retrieval
 
         bm25_docs: list[Document] = []
         vector_docs: list[Document] = []

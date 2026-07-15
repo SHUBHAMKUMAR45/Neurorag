@@ -11,14 +11,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import math
 import random
 import uuid
-from pathlib import Path
-from typing import Any
 
 import pytest
-
 
 # ─── Shared mock PipelineResult ───────────────────────────────────────────────
 
@@ -104,7 +100,7 @@ class TestBenchmarkDataset:
         assert [d["id"] for d in s1] != [d["id"] for d in s3]
 
     def test_batch_iteration_covers_all(self):
-        from evaluation.benchmark_dataset import load_benchmark, iter_batches
+        from evaluation.benchmark_dataset import iter_batches, load_benchmark
         data = load_benchmark()
         batches = list(iter_batches(data, batch_size=32))
         total = sum(len(b) for b in batches)
@@ -112,7 +108,7 @@ class TestBenchmarkDataset:
         assert all(len(b) <= 32 for b in batches)
 
     def test_json_export_valid(self, tmp_path):
-        from evaluation.benchmark_dataset import save_benchmark_json, load_benchmark
+        from evaluation.benchmark_dataset import load_benchmark, save_benchmark_json
         path = tmp_path / "bench.json"
         save_benchmark_json(str(path))
         assert path.exists()
@@ -178,7 +174,7 @@ class TestRAGMetrics:
         assert ndcg_at_k(["d1", "d2", "d3"], grades, 3) == pytest.approx(1.0, abs=1e-9)
 
     def test_mrr_correct(self):
-        from evaluation.rag_metrics import mean_reciprocal_rank, RetrievalSample
+        from evaluation.rag_metrics import RetrievalSample, mean_reciprocal_rank
         samples = [
             RetrievalSample("q1", ["d2", "d1", "d3"], {"d1"}),
             RetrievalSample("q2", ["d1", "d2", "d3"], {"d1"}),
@@ -198,7 +194,7 @@ class TestRAGMetrics:
         assert context_relevance_score("any query", []) == 0.0
 
     def test_compute_retrieval_metrics_aggregation(self):
-        from evaluation.rag_metrics import compute_retrieval_metrics, RetrievalSample
+        from evaluation.rag_metrics import RetrievalSample, compute_retrieval_metrics
         samples = [
             RetrievalSample("q1", ["d1", "d2", "d3"], {"d1"}),
             RetrievalSample("q2", ["d2", "d1", "d3"], {"d1"}),
@@ -214,7 +210,7 @@ class TestRAGMetrics:
         assert 0 <= m["mrr"] <= 1
 
     def test_compute_generation_metrics(self):
-        from evaluation.rag_metrics import compute_generation_metrics, GenerationSample
+        from evaluation.rag_metrics import GenerationSample, compute_generation_metrics
         samples = [
             GenerationSample("q1", "retrieval augmented generation system", "retrieval augmented generation", [], 0.9),
             GenerationSample("q2", "the answer involves multiple steps", "answer involves steps", [], 0.8),
@@ -235,8 +231,8 @@ class TestSelfHealingValidator:
 
     @pytest.mark.asyncio
     async def test_basic_report_structure(self):
-        from evaluation.self_healing_validator import SelfHealingValidator
         from evaluation.benchmark_dataset import load_benchmark
+        from evaluation.self_healing_validator import SelfHealingValidator
         samples = load_benchmark(max_samples=10, shuffle=True, seed=5)
         v = SelfHealingValidator(_mock_pipeline, confidence_threshold=0.85, concurrency=5)
         report = await v.validate(samples)
@@ -249,8 +245,8 @@ class TestSelfHealingValidator:
 
     @pytest.mark.asyncio
     async def test_single_loop_queries_counted(self):
-        from evaluation.self_healing_validator import SelfHealingValidator
         from evaluation.benchmark_dataset import load_benchmark
+        from evaluation.self_healing_validator import SelfHealingValidator
 
         async def _one_loop(q):
             return _MockResult(q, loops=1, confidence=0.90)
@@ -263,8 +259,8 @@ class TestSelfHealingValidator:
 
     @pytest.mark.asyncio
     async def test_non_converging_queries_tracked(self):
-        from evaluation.self_healing_validator import SelfHealingValidator
         from evaluation.benchmark_dataset import load_benchmark
+        from evaluation.self_healing_validator import SelfHealingValidator
         samples = load_benchmark(max_samples=10, shuffle=True, seed=2)
         v = SelfHealingValidator(_low_confidence_pipeline, confidence_threshold=0.85, concurrency=5)
         report = await v.validate(samples)
@@ -273,8 +269,8 @@ class TestSelfHealingValidator:
 
     @pytest.mark.asyncio
     async def test_confidence_improvement_positive_for_healing(self):
-        from evaluation.self_healing_validator import SelfHealingValidator
         from evaluation.benchmark_dataset import load_benchmark
+        from evaluation.self_healing_validator import SelfHealingValidator
 
         call_count: dict[str, int] = {}
 
@@ -292,8 +288,8 @@ class TestSelfHealingValidator:
 
     @pytest.mark.asyncio
     async def test_print_summary_runs_without_error(self, capsys):
-        from evaluation.self_healing_validator import SelfHealingValidator
         from evaluation.benchmark_dataset import load_benchmark
+        from evaluation.self_healing_validator import SelfHealingValidator
         samples = load_benchmark(max_samples=5, shuffle=True, seed=4)
         v = SelfHealingValidator(_mock_pipeline, confidence_threshold=0.85, concurrency=3)
         report = await v.validate(samples)
@@ -304,8 +300,8 @@ class TestSelfHealingValidator:
 
     @pytest.mark.asyncio
     async def test_domain_breakdown_present(self):
-        from evaluation.self_healing_validator import SelfHealingValidator
         from evaluation.benchmark_dataset import load_benchmark
+        from evaluation.self_healing_validator import SelfHealingValidator
         samples = load_benchmark(max_samples=15, shuffle=True, seed=42)
         v = SelfHealingValidator(_mock_pipeline, confidence_threshold=0.85, concurrency=5)
         report = await v.validate(samples)
@@ -367,7 +363,12 @@ class TestLoadTestInfrastructure:
         assert sum(hist.values()) == 200
 
     def test_weighted_queries_distribution(self):
-        from tests.test_load_production import _WEIGHTED_QUERIES, _FACTUAL_QUERIES, _REASONING_QUERIES, _MULTI_HOP_QUERIES
+        from tests.test_load_production import (
+            _FACTUAL_QUERIES,
+            _MULTI_HOP_QUERIES,
+            _REASONING_QUERIES,
+            _WEIGHTED_QUERIES,
+        )
         total = len(_WEIGHTED_QUERIES)
         # 6x/3x/1x multipliers on lists of 15/10/5 = 90/30/5 = 72%/24%/4%
         factual_count = sum(1 for q in _WEIGHTED_QUERIES if q in _FACTUAL_QUERIES)
@@ -464,7 +465,6 @@ assert _faithfulness_threshold("0.70") == 0.70
 
     def test_push_gauge_helper_handles_failure(self):
         """_push_gauge must not raise on connection failure."""
-        import importlib.util, sys
         # Simulate _push_gauge locally without requests
         def _push_gauge(name, value):
             try:
@@ -663,7 +663,10 @@ class TestMetricsLoggingGraceful:
         })
 
     def test_log_self_healing_metrics_handles_missing_prometheus(self):
-        from evaluation.self_healing_validator import SelfHealingReport, log_self_healing_metrics_to_prometheus
+        from evaluation.self_healing_validator import (
+            SelfHealingReport,
+            log_self_healing_metrics_to_prometheus,
+        )
         report = SelfHealingReport(
             n_queries=50, n_converged=40, n_non_converged=10,
             retry_success_rate=0.80, convergence_efficiency=2.3,

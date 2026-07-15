@@ -18,9 +18,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from airflow import DAG
 from airflow.models import Variable
-from airflow.operators.email import EmailOperator
 from airflow.operators.python import BranchPythonOperator, PythonOperator
-from airflow.providers.docker.operators.docker import DockerOperator
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +115,9 @@ with DAG(
 
     def _sample_queries(**ctx) -> None:
         """Pull last 500 queries from Postgres for offline eval."""
-        import asyncpg
         import asyncio
+
+        import asyncpg
 
         async def _fetch():
             pool = await asyncpg.create_pool(os.environ["POSTGRES_URL"])
@@ -292,7 +291,8 @@ with DAG(
 
     def _rebuild_index(**ctx) -> None:
         """Full index rebuild from raw document store."""
-        import sys, pathlib
+        import pathlib
+        import sys
         sys.path.insert(0, "/app")
         from rag.ingest import IngestionEngine
 

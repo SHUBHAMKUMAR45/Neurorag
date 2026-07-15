@@ -14,24 +14,19 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import logging
-import time
-import uuid
 import os
 import re as _re
-
-from pathlib import Path
+import uuid
 from contextlib import asynccontextmanager
-from typing import Any, Optional
-
-from dotenv import load_dotenv
-load_dotenv()   # <-- IMPORTANT loads .env automatically
+from pathlib import Path
+from typing import Any
 
 import structlog
 import uvicorn
-
-from fastapi import FastAPI, HTTPException, Request
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -43,23 +38,15 @@ from api.middleware import (
     TracingMiddleware,
     setup_tracing,
 )
-
 from configs.settings import get_config
 from dashboard.metrics import (
-    CONFIDENCE_SCORE,
-    DOCS_RETRIEVED,
     FAISS_INDEX_SIZE,
-    HALLUCINATION_TOTAL,
-    INGEST_CHUNKS_TOTAL,
-    INGEST_DOCS_TOTAL,
-    QUERY_LATENCY,
-    QUERY_LOOPS,
-    QUERY_TOTAL,
     start_metrics_server,
 )
-
 from evaluation.evaluator import Evaluator
 from rag.ingest import IngestionEngine
+
+load_dotenv()   # <-- IMPORTANT loads .env automatically
 
 # ─────────────────────────────────────────────────────────────
 
@@ -84,7 +71,7 @@ _cfg = get_config()
 
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
-    request_id: Optional[str] = None
+    request_id: str | None = None
 
 
 class QueryResponse(BaseModel):

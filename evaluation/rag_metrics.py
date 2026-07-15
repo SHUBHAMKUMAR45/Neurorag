@@ -18,8 +18,8 @@ from __future__ import annotations
 import logging
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 import numpy as np
 
@@ -437,34 +437,34 @@ def log_retrieval_metrics_to_prometheus(metrics: dict) -> None:
     try:
         from prometheus_client import Gauge
 
-        _BENCH_PRECISION = Gauge(
+        bench_precision = Gauge(
             "neurorag_bench_precision_at_k",
             "Benchmark Precision@K",
             ["k"],
         )
-        _BENCH_RECALL = Gauge(
+        bench_recall = Gauge(
             "neurorag_bench_recall_at_k",
             "Benchmark Recall@K",
             ["k"],
         )
-        _BENCH_NDCG = Gauge(
+        bench_ndcg = Gauge(
             "neurorag_bench_ndcg_at_k",
             "Benchmark NDCG@K",
             ["k"],
         )
-        _BENCH_MRR = Gauge("neurorag_bench_mrr", "Benchmark MRR")
-        _BENCH_MAP = Gauge("neurorag_bench_map", "Benchmark MAP")
+        bench_mrr = Gauge("neurorag_bench_mrr", "Benchmark MRR")
+        bench_map = Gauge("neurorag_bench_map", "Benchmark MAP")
 
         for k, v in metrics.get("precision_at_k", {}).items():
-            _BENCH_PRECISION.labels(k=str(k)).set(v)
+            bench_precision.labels(k=str(k)).set(v)
         for k, v in metrics.get("recall_at_k", {}).items():
-            _BENCH_RECALL.labels(k=str(k)).set(v)
+            bench_recall.labels(k=str(k)).set(v)
         for k, v in metrics.get("ndcg_at_k", {}).items():
-            _BENCH_NDCG.labels(k=str(k)).set(v)
+            bench_ndcg.labels(k=str(k)).set(v)
         if "mrr" in metrics:
-            _BENCH_MRR.set(metrics["mrr"])
+            bench_mrr.set(metrics["mrr"])
         if "map" in metrics:
-            _BENCH_MAP.set(metrics["map"])
+            bench_map.set(metrics["map"])
 
         logger.info("Retrieval metrics logged to Prometheus: %s", metrics)
 
@@ -477,13 +477,13 @@ def log_generation_metrics_to_prometheus(metrics: dict) -> None:
     try:
         from prometheus_client import Gauge
 
-        _BENCH_F1 = Gauge("neurorag_bench_token_f1", "Benchmark avg token F1")
-        _BENCH_CONF = Gauge("neurorag_bench_avg_confidence", "Benchmark avg confidence")
-        _BENCH_CTX_REL = Gauge("neurorag_bench_context_relevance", "Benchmark context relevance")
+        bench_f1 = Gauge("neurorag_bench_token_f1", "Benchmark avg token F1")
+        bench_conf = Gauge("neurorag_bench_avg_confidence", "Benchmark avg confidence")
+        bench_ctx_rel = Gauge("neurorag_bench_context_relevance", "Benchmark context relevance")
 
-        _BENCH_F1.set(metrics.get("avg_token_f1", 0))
-        _BENCH_CONF.set(metrics.get("avg_confidence", 0))
-        _BENCH_CTX_REL.set(metrics.get("avg_context_relevance", 0))
+        bench_f1.set(metrics.get("avg_token_f1", 0))
+        bench_conf.set(metrics.get("avg_confidence", 0))
+        bench_ctx_rel.set(metrics.get("avg_context_relevance", 0))
 
         logger.info("Generation metrics logged to Prometheus: %s", metrics)
 

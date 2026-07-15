@@ -38,10 +38,8 @@ import asyncio
 import json
 import logging
 import random
-import statistics
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +98,6 @@ BASE_URL = __import__("os").environ.get("NEURORAG_BASE_URL", "http://localhost:8
 
 try:
     from locust import HttpUser, TaskSet, between, events, task
-    from locust.runners import MasterRunner
 
     # ── Custom metric aggregation ──────────────────────────────────────────
 
@@ -141,7 +138,7 @@ try:
         """Print RAG-specific metrics summary at test end."""
         m = _rag_metrics
         if m.confidence_scores:
-            print(f"\n=== RAG METRICS SUMMARY ===")
+            print("\n=== RAG METRICS SUMMARY ===")
             print(f"Responses analysed: {m.total_responses}")
             print(f"Avg confidence:  {sum(m.confidence_scores)/len(m.confidence_scores):.3f}")
             print(f"Min confidence:  {min(m.confidence_scores):.3f}")
@@ -414,17 +411,17 @@ async def run_async_load_test(
     print(f"{'='*50}")
     print(f"Requests:    {n_requests} ({result.throughput_rps:.1f} req/s)")
     print(f"Errors:      {n_errors} ({result.error_rate*100:.2f}%)")
-    print(f"Latency:")
+    print("Latency:")
     print(f"  p50:  {result.p50_ms:.0f}ms")
     print(f"  p95:  {result.p95_ms:.0f}ms")
     print(f"  p99:  {result.p99_ms:.0f}ms")
     print(f"  min:  {result.min_ms:.0f}ms")
     print(f"  max:  {result.max_ms:.0f}ms")
-    print(f"RAG Metrics:")
+    print("RAG Metrics:")
     print(f"  avg confidence:  {result.avg_confidence:.3f}")
     print(f"  avg loops:       {result.avg_loops:.2f}")
     print(f"  insufficient:    {result.insufficient_rate*100:.1f}%")
-    print(f"\nSLO Evaluation:")
+    print("\nSLO Evaluation:")
     print(f"  p95 ≤ 1500ms:  {'✅ PASS' if result.slo_p95_pass else '❌ FAIL'} ({result.p95_ms:.0f}ms)")
     print(f"  Error ≤ 1%:    {'✅ PASS' if result.slo_error_pass else '❌ FAIL'} ({result.error_rate*100:.2f}%)")
     print(f"  ≥ 10 req/s:    {'✅ PASS' if result.slo_throughput_pass else '❌ FAIL'} ({result.throughput_rps:.1f} req/s)")

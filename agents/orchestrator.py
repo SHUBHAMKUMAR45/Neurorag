@@ -9,7 +9,6 @@ import asyncio
 import logging
 import time
 from contextlib import contextmanager
-from typing import Optional
 
 from agents.critic import Critic
 from agents.generator import Generator
@@ -17,7 +16,7 @@ from agents.intent_analyzer import IntentAnalyzer
 from agents.memory import AdaptiveContext, FailureMemory
 from agents.planner import Planner
 from agents.reflection_fixer import FixerAgent, ReflectionAgent
-from agents.schemas import Document, FailureType, FixAction, FixerResult, PipelineResult
+from agents.schemas import Document, FailureType, FixerResult, PipelineResult
 from configs.settings import get_config
 from evaluation.evaluator import Evaluator
 from rag.circuit_breaker import wrap_with_circuit_breaker
@@ -47,8 +46,8 @@ class NeuroRAGOrchestrator:
     def __init__(
         self,
         engine: IngestionEngine,
-        llm: Optional[BaseLLMClient] = None,
-        critic_llm: Optional[BaseLLMClient] = None,
+        llm: BaseLLMClient | None = None,
+        critic_llm: BaseLLMClient | None = None,
     ) -> None:
         self._cfg = get_config()
         sh = self._cfg.self_heal

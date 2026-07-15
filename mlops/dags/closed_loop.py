@@ -32,7 +32,6 @@ import os
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from airflow import DAG
 from airflow.models import Variable
@@ -68,7 +67,7 @@ def _pushgateway_url() -> str:
     return Variable.get("PUSHGATEWAY_URL", default_var="http://pushgateway:9091")
 
 
-def _push_gauge(metric: str, value: float, labels: Optional[dict] = None) -> None:
+def _push_gauge(metric: str, value: float, labels: dict | None = None) -> None:
     """Push a single gauge value to Prometheus Pushgateway."""
     try:
         import requests
@@ -82,7 +81,7 @@ def _push_gauge(metric: str, value: float, labels: Optional[dict] = None) -> Non
         logger.warning("Pushgateway push failed: %s", exc)
 
 
-def _trigger_airflow_dag(dag_id: str, conf: Optional[dict] = None) -> Optional[str]:
+def _trigger_airflow_dag(dag_id: str, conf: dict | None = None) -> str | None:
     """Trigger an Airflow DAG via the REST API."""
     try:
         import requests
@@ -120,8 +119,9 @@ with DAG(
         Sample recent queries from Postgres and compute average faithfulness.
         Pushes results to XCom for the branch operator.
         """
-        import asyncpg
         import asyncio
+
+        import asyncpg
 
         postgres_url = os.environ.get(
             "POSTGRES_URL",
@@ -255,8 +255,9 @@ with DAG(
         # Import here to avoid loading heavy deps at DAG parse time
         import sys
         sys.path.insert(0, "/app")
-        from rag.ingest import IngestionEngine
         import glob
+
+        from rag.ingest import IngestionEngine
 
         docs = []
         for pattern in ("**/*.txt", "**/*.md"):
@@ -272,7 +273,7 @@ with DAG(
 
         logger.info("Loaded %d documents for rebuild.", len(docs))
         if not docs:
-            raise RuntimeError("No documents found at %s — rebuild aborted." % source_path)
+            raise RuntimeError(f"No documents found at {source_path} — rebuild aborted.")
 
         engine = IngestionEngine()
         chunks = engine.ingest(docs)
@@ -315,7 +316,8 @@ with DAG(
 
     def _run_post_retrain_eval(**ctx) -> None:
         """Run evaluation on the new index and push result to XCom."""
-        import sys, asyncio
+        import asyncio
+        import sys
         sys.path.insert(0, "/app")
         import asyncpg
 

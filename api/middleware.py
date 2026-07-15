@@ -10,7 +10,7 @@ import hashlib
 import logging
 import os
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
@@ -22,23 +22,23 @@ logger = logging.getLogger(__name__)
 # ─── OpenTelemetry (optional) ─────────────────────────────────────────────────
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.sdk.resources import Resource
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
     trace = None  # type: ignore[assignment]
 
 
-def setup_tracing(service_name: str = "neurorag-api") -> Optional[object]:
+def setup_tracing(service_name: str = "neurorag-api") -> object | None:
     if not _OTEL_AVAILABLE:
         logger.info("OpenTelemetry not installed; tracing disabled.")
         return None
     try:
-        from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace.export import ConsoleSpanExporter, BatchSpanProcessor
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import (
+            BatchSpanProcessor,
+            ConsoleSpanExporter,
+        )
         provider = TracerProvider(
             resource=Resource.create({"service.name": service_name, "service.version": "3.0.0"})
         )
@@ -110,7 +110,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 # ─── Tracing Middleware ───────────────────────────────────────────────────────
 
 class TracingMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, tracer: Optional[object] = None) -> None:
+    def __init__(self, app: ASGIApp, tracer: object | None = None) -> None:
         super().__init__(app)
         self._tracer = tracer
 

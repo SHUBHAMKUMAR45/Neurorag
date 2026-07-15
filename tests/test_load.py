@@ -23,11 +23,8 @@ Also contains pytest-friendly smoke tests (no Locust needed).
 """
 from __future__ import annotations
 
-import json
 import os
 import random
-import time
-from typing import Any
 
 import pytest
 
@@ -177,7 +174,7 @@ class TestSmoke:
 
     def test_rate_limiting_returns_429(self, api_client):
         """Burst 70 requests in quick succession to trigger rate limit."""
-        import httpx, concurrent.futures
+        import concurrent.futures
         statuses = []
         def _req(_):
             r = api_client.post("/query", json={"query": "burst test"})
@@ -229,7 +226,9 @@ class TestSmoke:
 )
 async def test_concurrent_queries():
     """50 concurrent queries must all succeed within 10s."""
-    import httpx, asyncio
+    import asyncio
+
+    import httpx
 
     async with httpx.AsyncClient(
         base_url=BASE_URL, timeout=15.0, headers={"X-API-Key": API_KEY}

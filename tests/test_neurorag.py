@@ -6,9 +6,7 @@ Run with: pytest tests/ -v --tb=short
 """
 from __future__ import annotations
 
-import asyncio
 import json
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,7 +28,6 @@ from agents.schemas import (
 )
 from rag.ingest import semantic_chunk
 from rag.retriever import _rrf_score
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -359,16 +356,16 @@ class TestFullPipeline:
             return mock_critic_llm.complete(prompt, system, temperature, max_tokens)
         mock_critic_llm.acomplete = critic_acomplete
 
-        with patch("agents.orchestrator.HybridRetriever") as MockRetriever, \
-             patch("agents.orchestrator.Reranker") as MockReranker, \
+        with patch("agents.orchestrator.HybridRetriever") as mock_retriever_class, \
+             patch("agents.orchestrator.Reranker") as mock_reranker_class, \
              patch("agents.orchestrator.Evaluator"):
 
-            mock_retriever = MockRetriever.return_value
+            mock_retriever = mock_retriever_class.return_value
             mock_retriever.retrieve_async = AsyncMock(return_value=[
                 Document(doc_id="doc1", chunk_id="0", text="Paris is the capital of France.", score=0.9)
             ])
 
-            mock_reranker = MockReranker.return_value
+            mock_reranker = mock_reranker_class.return_value
             mock_reranker.rerank.return_value = [
                 Document(doc_id="doc1", chunk_id="0", text="Paris is the capital of France.", score=0.9)
             ]
@@ -400,13 +397,13 @@ class TestFullPipeline:
             return mock_critic_llm.complete(prompt, system, temperature, max_tokens)
         mock_critic_llm.acomplete = critic_acomplete
 
-        with patch("agents.orchestrator.HybridRetriever") as MockRetriever, \
-             patch("agents.orchestrator.Reranker") as MockReranker, \
+        with patch("agents.orchestrator.HybridRetriever") as mock_retriever_class, \
+             patch("agents.orchestrator.Reranker") as mock_reranker_class, \
              patch("agents.orchestrator.Evaluator"):
 
-            mock_retriever = MockRetriever.return_value
+            mock_retriever = mock_retriever_class.return_value
             mock_retriever.retrieve_async = AsyncMock(return_value=[])
-            mock_reranker = MockReranker.return_value
+            mock_reranker = mock_reranker_class.return_value
             mock_reranker.rerank.return_value = []
 
             orchestrator = NeuroRAGOrchestrator(mock_engine, mock_llm, mock_critic_llm)

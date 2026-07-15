@@ -9,7 +9,7 @@ import logging
 import re
 from typing import Any
 
-from agents.schemas import IntentResult, PlanResult, QueryType
+from agents.schemas import IntentResult, PlanResult
 from configs.settings import get_config
 
 logger = logging.getLogger(__name__)

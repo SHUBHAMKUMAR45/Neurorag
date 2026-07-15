@@ -18,8 +18,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Awaitable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -291,28 +292,28 @@ def log_self_healing_metrics_to_prometheus(report: SelfHealingReport) -> None:
     try:
         from prometheus_client import Gauge
 
-        _RETRY_SUCCESS = Gauge(
+        retry_success = Gauge(
             "neurorag_bench_retry_success_rate",
             "Self-healing retry success rate from benchmark",
         )
-        _CONV_EFF = Gauge(
+        conv_eff = Gauge(
             "neurorag_bench_convergence_efficiency",
             "Average loops to converge for multi-loop queries",
         )
-        _CONF_IMPROVEMENT = Gauge(
+        conf_improvement = Gauge(
             "neurorag_bench_confidence_improvement",
             "Average confidence improvement from self-healing",
         )
-        _CONV_RATE = Gauge(
+        conv_rate = Gauge(
             "neurorag_bench_convergence_rate",
             "Fraction of queries that converged",
         )
 
-        _RETRY_SUCCESS.set(report.retry_success_rate)
-        _CONV_EFF.set(report.convergence_efficiency)
-        _CONF_IMPROVEMENT.set(report.avg_confidence_improvement)
+        retry_success.set(report.retry_success_rate)
+        conv_eff.set(report.convergence_efficiency)
+        conf_improvement.set(report.avg_confidence_improvement)
         if report.n_queries > 0:
-            _CONV_RATE.set(report.n_converged / report.n_queries)
+            conv_rate.set(report.n_converged / report.n_queries)
 
         logger.info(
             "Self-healing metrics logged: retry_success=%.3f conv_eff=%.2f improvement=%.4f",

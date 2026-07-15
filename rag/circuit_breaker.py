@@ -10,7 +10,6 @@ import asyncio
 import logging
 import random
 import time
-from typing import Any
 
 from agents.schemas import CircuitState
 from rag.llm_client import BaseLLMClient
@@ -30,7 +29,7 @@ except ImportError:
     _PROM = False
 
 
-class CircuitBreakerOpen(RuntimeError):
+class CircuitBreakerOpenError(RuntimeError):
     """Raised when a call is attempted against an OPEN circuit."""
 
 
@@ -79,7 +78,7 @@ class CircuitBreakerLLMClient(BaseLLMClient):
         a non-async context; called from async context via acomplete().
         """
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # Already in async context — use thread pool to avoid deadlock
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
@@ -105,7 +104,7 @@ class CircuitBreakerLLMClient(BaseLLMClient):
                 if _PROM:
                     CB_BLOCKED.labels(client=self._name).inc()
                 remaining = self._cooldown - (time.monotonic() - self._last_failure_time)
-                raise CircuitBreakerOpen(
+                raise CircuitBreakerOpenError(
                     f"Circuit OPEN for '{self._name}' — cooldown {remaining:.1f}s remaining"
                 )
 
@@ -115,7 +114,7 @@ class CircuitBreakerLLMClient(BaseLLMClient):
                 result = await self._client.acomplete(prompt, system, temperature, max_tokens)
                 await self._on_success()
                 return result
-            except CircuitBreakerOpen:
+            except CircuitBreakerOpenError:
                 raise
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc

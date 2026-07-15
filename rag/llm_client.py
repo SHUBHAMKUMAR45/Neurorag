@@ -10,7 +10,6 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
 from configs.settings import LLMConfig, get_config
 
@@ -216,7 +215,7 @@ class GeminiClient(BaseLLMClient):
         return response.text
 
 
-def build_llm_client(cfg: Optional[LLMConfig] = None) -> BaseLLMClient:
+def build_llm_client(cfg: LLMConfig | None = None) -> BaseLLMClient:
     if cfg is None:
         cfg = get_config().llm
     if cfg.provider == "openai":

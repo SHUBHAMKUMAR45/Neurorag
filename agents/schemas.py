@@ -6,10 +6,9 @@ from __future__ import annotations
 
 import uuid
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ─── Enumerations ────────────────────────────────────────────────────────────
 
@@ -104,7 +103,7 @@ class ReflectionResult(BaseModel):
 
 class FixerResult(BaseModel):
     modified_query: str
-    retrieval_top_k_override: Optional[int] = None
+    retrieval_top_k_override: int | None = None
     prompt_hint: str = ""
 
 
@@ -112,8 +111,8 @@ class FixerResult(BaseModel):
 
 class ContextHintSchema(BaseModel):
     """Serialisable form of AdaptiveContext.ContextHint."""
-    similar_past_answer: Optional[str] = None
-    recommended_fix_action: Optional[FixAction] = None
+    similar_past_answer: str | None = None
+    recommended_fix_action: FixAction | None = None
     recommended_top_k_boost: int = 0
     prior_failure_types: list[str] = Field(default_factory=list)
     confidence_floor: float = 0.0
