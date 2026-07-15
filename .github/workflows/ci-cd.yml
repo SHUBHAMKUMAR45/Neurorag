@@ -79,13 +79,8 @@ jobs:
       - name: Install dependencies (CPU-only for CI)
         run: |
           pip install --upgrade pip
-          # Install CPU-only torch to avoid 2GB CUDA download in CI
-          pip install torch==2.2.2 --index-url https://download.pytorch.org/whl/cpu
-          pip install "numpy<2"
-          pip install faiss-cpu sentence-transformers whoosh asyncpg
-          pip install fastapi uvicorn pydantic pydantic-settings pyyaml
-          pip install redis structlog prometheus-client httpx
-          pip install pytest pytest-asyncio pytest-cov pytest-mock
+          # Install locked requirements using CPU-only torch index
+          pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Run unit tests
         run: |
