@@ -10,6 +10,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from configs.settings import LLMConfig, get_config
 
@@ -114,7 +115,7 @@ class OpenAIClient(BaseLLMClient):
         temperature: float = 0.0,
         max_tokens: int = 512,
     ) -> str:
-        messages = []
+        messages: list[Any] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
@@ -134,7 +135,7 @@ class OpenAIClient(BaseLLMClient):
         max_tokens: int = 512,
     ) -> str:
         """Native async — avoids thread pool overhead for OpenAI."""
-        messages = []
+        messages: list[Any] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
@@ -172,10 +173,10 @@ class GeminiClient(BaseLLMClient):
         max_tokens: int = 1024,
     ) -> str:
         import google.generativeai as genai
-        generation_config = {
-            "temperature": temperature,
-            "max_output_tokens": max_tokens,
-        }
+        generation_config = genai.GenerationConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
         if system:
             model = genai.GenerativeModel(
                 model_name=self._model_name,
@@ -197,10 +198,10 @@ class GeminiClient(BaseLLMClient):
         max_tokens: int = 1024,
     ) -> str:
         import google.generativeai as genai
-        generation_config = {
-            "temperature": temperature,
-            "max_output_tokens": max_tokens,
-        }
+        generation_config = genai.GenerationConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
         if system:
             model = genai.GenerativeModel(
                 model_name=self._model_name,

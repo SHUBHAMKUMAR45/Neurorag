@@ -5,14 +5,13 @@ Added: graceful OpenTelemetry degradation
 """
 from __future__ import annotations
 
-from typing import Any
-
 import asyncio
 import hashlib
 import logging
 import os
 import time
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
