@@ -16,7 +16,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/neurorag
+  IMAGE_NAME: shubhamkumar45/neurorag
   PYTHON_VERSION: "3.11"
 
 jobs:
